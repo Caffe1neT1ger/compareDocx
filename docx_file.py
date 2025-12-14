@@ -59,9 +59,15 @@ class DocxFile:
                 heading_level = self._get_heading_level(style_name, para)
                 element_type = self._classify_element(text, heading_level, style_name)
                 
-                if element_type in ["section", "chapter"]:
-                    # Обновление стека иерархии
-                    self._update_hierarchy_stack(text, heading_level, element_type)
+                # Игнорируем абзацы, которые являются подписями к рисункам/таблицам
+                # (не добавляем их в иерархию)
+                if not (text.lower().startswith('рисунок') or 
+                        text.lower().startswith('таблица') or
+                        text.lower().startswith('рис.') or
+                        text.lower().startswith('табл.')):
+                    if element_type in ["section", "chapter"]:
+                        # Обновление стека иерархии
+                        self._update_hierarchy_stack(text, heading_level, element_type)
             
             if not text:
                 continue

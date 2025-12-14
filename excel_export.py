@@ -42,18 +42,24 @@ class ExcelExporter:
         ws_results = self.workbook.create_sheet("Сравнение", 0)
         self._create_comparison_sheet(ws_results, comparison_results, file1_name, file2_name)
         
+        # Создание листа только с изменениями
+        changes_only = [r for r in comparison_results if r.get("status") != "identical"]
+        if changes_only:
+            ws_changes = self.workbook.create_sheet("Только изменения", 1)
+            self._create_changes_only_sheet(ws_changes, changes_only, file1_name, file2_name)
+        
         # Создание листа со статистикой
-        ws_stats = self.workbook.create_sheet("Статистика", 1)
+        ws_stats = self.workbook.create_sheet("Статистика", 2)
         self._create_statistics_sheet(ws_stats, statistics, file1_name, file2_name)
         
         # Создание листа с изменениями таблиц
         if table_changes:
-            ws_tables = self.workbook.create_sheet("Таблицы", 2)
+            ws_tables = self.workbook.create_sheet("Таблицы", 3)
             self._create_tables_sheet(ws_tables, table_changes)
         
         # Создание листа с изменениями изображений
         if image_changes:
-            ws_images = self.workbook.create_sheet("Изображения", 3)
+            ws_images = self.workbook.create_sheet("Изображения", 4)
             self._create_images_sheet(ws_images, image_changes)
         
         # Сохранение файла
@@ -66,6 +72,7 @@ class ExcelExporter:
         headers = [
             "№",
             "Статус",
+            "Тип исправления",
             f"Полный путь ({file1_name})",
             f"Страница ({file1_name})",
             f"Абзац № ({file1_name})",
@@ -123,6 +130,7 @@ class ExcelExporter:
             row_data = [
                 row_idx - 1,  # №
                 status_ru,  # Статус
+                result.get("change_type", ""),  # Тип исправления
                 result.get("full_path_1") or "",  # Полный путь 1
                 result.get("page_1") or "",  # Страница 1
                 result.get("index_1") or "",  # Абзац № 1
@@ -132,7 +140,7 @@ class ExcelExporter:
                 result.get("index_2") or "",  # Абзац № 2
                 result.get("text_2") or "",  # Текст 2
                 f"{result['similarity'] * 100:.1f}%" if result.get("similarity") else "",  # Схожесть
-                "\n".join(result.get("differences", []))[:500],  # Различия (ограничение длины)
+                "\n".join(result.get("differences", []))[:1000],  # Различия (увеличено для полных текстов)
                 result.get("change_description", "")  # Описание изменений
             ]
             
@@ -146,17 +154,18 @@ class ExcelExporter:
         column_widths = {
             'A': 8,   # №
             'B': 12,  # Статус
-            'C': 40,  # Полный путь 1
-            'D': 10,  # Страница 1
-            'E': 12,  # Абзац № 1
-            'F': 50,  # Текст 1
-            'G': 40,  # Полный путь 2
-            'H': 10,  # Страница 2
-            'I': 12,  # Абзац № 2
-            'J': 50,  # Текст 2
-            'K': 12,  # Схожесть
-            'L': 40,  # Различия
-            'M': 60   # Описание изменений
+            'C': 20,  # Тип исправления
+            'D': 40,  # Полный путь 1
+            'E': 10,  # Страница 1
+            'F': 12,  # Абзац № 1
+            'G': 50,  # Текст 1
+            'H': 40,  # Полный путь 2
+            'I': 10,  # Страница 2
+            'J': 12,  # Абзац № 2
+            'K': 50,  # Текст 2
+            'L': 12,  # Схожесть
+            'M': 60,  # Различия
+            'N': 60   # Описание изменений
         }
         
         for col, width in column_widths.items():
@@ -164,6 +173,12 @@ class ExcelExporter:
         
         # Фиксация первой строки
         worksheet.freeze_panes = 'A2'
+    
+    def _create_changes_only_sheet(self, worksheet, comparison_results: List[Dict],
+                                   file1_name: str, file2_name: str):
+        """Создание листа только с изменениями (без идентичных)."""
+        # Используем тот же метод, что и для основного листа
+        self._create_comparison_sheet(worksheet, comparison_results, file1_name, file2_name)
     
     def _create_statistics_sheet(self, worksheet, statistics: Dict,
                                 file1_name: str, file2_name: str):
@@ -208,7 +223,7 @@ class ExcelExporter:
     def _create_tables_sheet(self, worksheet, table_changes: List[Dict]):
         """Создание листа с изменениями таблиц."""
         # Заголовки
-        headers = ["№", "Статус", "Таблица 1", "Таблица 2", "Описание"]
+        headers = ["№", "Статус", "Название таблицы 1", "Название таблицы 2", "Описание", "Описание изменений"]
         
         header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
         header_font = Font(bold=True, color="FFFFFF", size=11)
@@ -246,12 +261,24 @@ class ExcelExporter:
                 "deleted": "Удалена"
             }.get(status, status)
             
+            # Формируем описание изменений в ячейках
+            cell_changes_desc = ""
+            if change.get("cell_changes"):
+                cell_changes = change["cell_changes"]
+                changes_list = []
+                for cc in cell_changes[:10]:  # Ограничиваем количество
+                    changes_list.append(f"Строка {cc['row']}, столбец {cc['col']}")
+                cell_changes_desc = f"Изменения в: {', '.join(changes_list)}"
+                if len(cell_changes) > 10:
+                    cell_changes_desc += f" и еще {len(cell_changes) - 10}"
+            
             row_data = [
                 row_idx - 1,
                 status_ru,
-                change.get("table_1_index") or "",
-                change.get("table_2_index") or "",
-                change.get("description", "")
+                change.get("table_1_name") or change.get("table_1_index") or "",
+                change.get("table_2_name") or change.get("table_2_index") or "",
+                change.get("description", ""),
+                change.get("change_description", "") or cell_changes_desc
             ]
             
             for col_idx, value in enumerate(row_data, 1):
@@ -263,16 +290,17 @@ class ExcelExporter:
         # Настройка ширины столбцов
         worksheet.column_dimensions['A'].width = 8
         worksheet.column_dimensions['B'].width = 12
-        worksheet.column_dimensions['C'].width = 12
-        worksheet.column_dimensions['D'].width = 12
-        worksheet.column_dimensions['E'].width = 60
+        worksheet.column_dimensions['C'].width = 30
+        worksheet.column_dimensions['D'].width = 30
+        worksheet.column_dimensions['E'].width = 40
+        worksheet.column_dimensions['F'].width = 60
         
         worksheet.freeze_panes = 'A2'
     
     def _create_images_sheet(self, worksheet, image_changes: List[Dict]):
         """Создание листа с изменениями изображений."""
         # Заголовки
-        headers = ["№", "Статус", "Изображение 1", "Изображение 2", "Описание"]
+        headers = ["№", "Статус", "Название изображения 1", "Название изображения 2", "Описание", "Описание изменений"]
         
         header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
         header_font = Font(bold=True, color="FFFFFF", size=11)
@@ -310,9 +338,10 @@ class ExcelExporter:
             row_data = [
                 row_idx - 1,
                 status_ru,
-                change.get("image_1_index") or "",
-                change.get("image_2_index") or "",
-                change.get("description", "")
+                change.get("image_1_name") or change.get("image_1_index") or "",
+                change.get("image_2_name") or change.get("image_2_index") or "",
+                change.get("description", ""),
+                change.get("change_description", "")
             ]
             
             for col_idx, value in enumerate(row_data, 1):
@@ -324,9 +353,10 @@ class ExcelExporter:
         # Настройка ширины столбцов
         worksheet.column_dimensions['A'].width = 8
         worksheet.column_dimensions['B'].width = 12
-        worksheet.column_dimensions['C'].width = 15
-        worksheet.column_dimensions['D'].width = 15
-        worksheet.column_dimensions['E'].width = 60
+        worksheet.column_dimensions['C'].width = 30
+        worksheet.column_dimensions['D'].width = 30
+        worksheet.column_dimensions['E'].width = 40
+        worksheet.column_dimensions['F'].width = 60
         
         worksheet.freeze_panes = 'A2'
 
