@@ -1,6 +1,15 @@
 """
 Модуль для работы с DOCX файлами.
-Класс DocxFile предоставляет функционал для парсинга и анализа структуры документа.
+
+Класс DocxFile предоставляет функционал для:
+- Парсинга структуры документа (разделы, главы, абзацы)
+- Извлечения таблиц и изображений
+- Построения иерархии документа
+- Определения уровней заголовков (включая кастомные стили)
+- Вычисления примерных номеров страниц
+- Построения полных путей до элементов документа
+
+Поддерживает как стандартные стили Word, так и кастомные стили.
 """
 
 from docx import Document
@@ -14,34 +23,59 @@ import io
 
 
 class DocxFile:
-    """Класс для работы с DOCX файлами."""
+    """
+    Класс для работы с DOCX файлами.
+    
+    Обеспечивает полный парсинг документа с извлечением:
+    - Абзацев с метаданными (стиль, уровень, путь, страница)
+    - Структуры документа (разделы, подразделы, главы)
+    - Таблиц с содержимым
+    - Изображений с метаданными
+    """
     
     def __init__(self, file_path: str):
         """
-        Инициализация класса.
+        Инициализация класса и парсинг документа.
         
         Args:
             file_path: Путь к DOCX файлу
+            
+        Примечание:
+            При инициализации автоматически выполняется полный парсинг документа.
         """
         self.file_path = file_path
-        self.document = Document(file_path)
-        self.paragraphs = []
-        self.sections = []
-        self.chapters = []
-        self.tables = []
-        self.images = []
-        self.hierarchy_stack = []  # Стек для построения иерархии
+        self.document = Document(file_path)  # Загрузка документа через python-docx
+        
+        # Структуры данных для хранения информации о документе
+        self.paragraphs = []  # Список всех абзацев с метаданными
+        self.sections = []  # Список разделов документа (уровень 1-2)
+        self.chapters = []  # Список глав документа (уровень 3+)
+        self.tables = []  # Список таблиц с содержимым
+        self.images = []  # Список изображений с метаданными
+        self.hierarchy_stack = []  # Стек для построения иерархии (путь до элемента)
+        
+        # Автоматический парсинг при инициализации
         self._parse_document()
     
     def _parse_document(self):
-        """Парсинг документа: извлечение абзацев, разделов, глав, таблиц и изображений."""
-        current_section = None
-        current_chapter = None
-        section_index = 0
-        chapter_index = 0
-        paragraph_index = 0
-        estimated_page = 1
-        chars_per_page = 2000  # Примерное количество символов на страницу
+        """
+        Основной метод парсинга документа.
+        
+        Выполняет:
+        1. Парсинг таблиц и изображений
+        2. Парсинг абзацев с определением структуры
+        3. Построение иерархии разделов и глав
+        4. Вычисление примерных номеров страниц
+        5. Построение полных путей до элементов
+        """
+        # Переменные для отслеживания текущей структуры
+        current_section = None  # Текущий раздел
+        current_chapter = None  # Текущая глава
+        section_index = 0  # Счетчик разделов
+        chapter_index = 0  # Счетчик глав
+        paragraph_index = 0  # Счетчик абзацев
+        estimated_page = 1  # Текущая примерная страница
+        chars_per_page = 2000  # Примерное количество символов на страницу (для расчета)
         
         # Парсинг таблиц
         self._parse_tables()
@@ -393,37 +427,64 @@ class DocxFile:
         return " > ".join(path_parts) if path_parts else ""
     
     def _parse_tables(self):
-        """Парсинг таблиц из документа."""
+        """
+        Парсинг всех таблиц из документа.
+        
+        Для каждой таблицы извлекает:
+        - Индекс таблицы
+        - Содержимое всех ячеек (по строкам и столбцам)
+        - Количество строк и столбцов
+        - Текстовое представление для сравнения
+        - Хеш содержимого для быстрого сравнения
+        """
         for table_idx, table in enumerate(self.document.tables):
+            # Базовая информация о таблице
             table_data = {
-                "index": table_idx + 1,
-                "rows": [],
-                "row_count": len(table.rows),
-                "col_count": len(table.columns) if table.rows else 0
+                "index": table_idx + 1,  # Номер таблицы (начиная с 1)
+                "rows": [],  # Список строк с данными ячеек
+                "row_count": len(table.rows),  # Количество строк
+                "col_count": len(table.columns) if table.rows else 0  # Количество столбцов
             }
             
+            # Извлечение данных из всех ячеек
             for row in table.rows:
                 row_data = []
                 for cell in row.cells:
-                    cell_text = cell.text.strip()
+                    cell_text = cell.text.strip()  # Текст ячейки без пробелов
                     row_data.append(cell_text)
                 table_data["rows"].append(row_data)
             
-            # Создание текстового представления таблицы для сравнения
+            # Создание текстового представления для сравнения
+            # Формат: каждая строка через табуляцию, строки через перенос
             table_text = "\n".join(["\t".join(row) for row in table_data["rows"]])
             table_data["text"] = table_text
+            
+            # Хеш для быстрого сравнения идентичных таблиц
             table_data["hash"] = hashlib.md5(table_text.encode()).hexdigest()
             
             self.tables.append(table_data)
     
     def _parse_images(self):
-        """Парсинг изображений из документа."""
-        image_idx = 0
-        processed_rels = set()
+        """
+        Парсинг всех изображений из документа.
         
-        # Поиск изображений через relationships
+        Использует два метода:
+        1. Через relationships (основной метод) - находит изображения через связи документа
+        2. Через XML (резервный) - ищет изображения в XML структуре абзацев
+        
+        Для каждого изображения извлекает:
+        - Индекс изображения
+        - Размер файла (если доступен)
+        - Хеш содержимого для сравнения
+        - Индекс абзаца, в котором находится изображение
+        """
+        image_idx = 0
+        processed_rels = set()  # Множество обработанных relationships для избежания дубликатов
+        
+        # Метод 1: Поиск изображений через relationships (основной метод)
         try:
             for rel in self.document.part.rels.values():
+                # Проверяем, является ли связь изображением
                 if rel.target_ref and "image" in str(rel.target_ref).lower():
                     rel_id = getattr(rel, 'rId', None)
                     if rel_id and rel_id not in processed_rels:
@@ -435,40 +496,44 @@ class DocxFile:
                             "relationship_id": rel_id
                         }
                         
-                        # Попытка получить данные изображения
+                        # Попытка получить данные изображения для создания хеша
                         try:
                             if hasattr(rel, 'target_part'):
                                 image_part = rel.target_part
                                 if hasattr(image_part, 'blob'):
+                                    # Получаем размер и хеш изображения
                                     image_data["size"] = len(image_part.blob)
                                     image_data["hash"] = hashlib.md5(image_part.blob).hexdigest()
                                 else:
+                                    # Если blob недоступен, создаем уникальный хеш
                                     image_data["hash"] = f"img_{rel_id}_{image_idx}"
                             else:
                                 image_data["hash"] = f"img_{rel_id}_{image_idx}"
                         except Exception:
+                            # В случае ошибки создаем уникальный идентификатор
                             image_data["hash"] = f"img_{rel_id}_{image_idx}"
                         
                         self.images.append(image_data)
                         image_idx += 1
         except Exception:
-            # Если не удалось извлечь через relationships, пробуем через XML
+            # Метод 2: Резервный метод через XML (если relationships не сработал)
             try:
                 for para_idx, para in enumerate(self.document.paragraphs):
                     for run in para.runs:
                         xml_str = str(run._element.xml)
+                        # Ищем изображения в XML структуре
                         if 'pic:pic' in xml_str or 'w:drawing' in xml_str:
                             image_data = {
                                 "index": image_idx + 1,
-                                "paragraph_index": para_idx + 1,
+                                "paragraph_index": para_idx + 1,  # Абзац, в котором найдено изображение
                                 "type": "image",
-                                "hash": f"image_{para_idx}_{image_idx}"
+                                "hash": f"image_{para_idx}_{image_idx}"  # Уникальный идентификатор
                             }
                             self.images.append(image_data)
                             image_idx += 1
-                            break
+                            break  # Одно изображение на абзац
             except Exception:
-                pass
+                pass  # Если и XML метод не сработал, просто пропускаем
     
     def get_tables(self) -> List[Dict]:
         """
