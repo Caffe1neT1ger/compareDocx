@@ -22,6 +22,20 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+*.pyc
+*.pyo
+*.pyd
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+.pytest_cache/
+coverage.xml
+*.cover
+*.log
 
 # IDE
 .vscode/
@@ -29,17 +43,36 @@ wheels/
 *.swp
 *.swo
 *~
+*.sublime-project
+*.sublime-workspace
 
 # Environment variables
 .env
+.env.local
+.env.*.local
 
-# Results
-results/*.xlsx
-results/*.xls
+# Results and output
+results/
+*.xlsx
+*.csv
+*.json
+*.html
+!tests/**/*.json
+!tests/**/*.xlsx
+!tests/**/*.csv
+!tests/**/*.html
 
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*~
 
 # Документация по улучшениям (временные файлы)
 docs/IMPROVEMENTS.md

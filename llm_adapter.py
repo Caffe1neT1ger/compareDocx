@@ -158,7 +158,9 @@ class LLMAdapter:
         # Загрузка конфигурации из .env или переменных окружения
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self.api_url = api_url or os.getenv("OPENAI_API_URL") or None
-        self.model = model or os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+        model_name = model or os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+        # Нормализация имени модели: замена обратных слэшей на прямые (для Windows)
+        self.model = model_name.replace("\\", "/") if model_name else "gpt-3.5-turbo"
         
         # Парсинг числовых значений из окружения
         try:
@@ -213,15 +215,45 @@ class LLMAdapter:
         Args:
             old_text: Текст из старого документа (базовая версия)
             new_text: Текст из нового документа (измененная версия)
-            context: Дополнительный контекст (например, путь к элементу, страница)
+            context: Дополнительный контекст в формате "Путь: ...; Страница: ..."
                     Может быть использован для более точного анализа
         
         Returns:
-            Ответ LLM в деловом стиле о характере изменений.
+            Ответ LLM в деловом стиле о характере изменений с путем в начале.
+            Формат: "Путь > Подпуть. страница X. [ответ LLM]"
             Если LLM недоступен или произошла ошибка, возвращает пустую строку.
         """
         if not self.enabled or not self.client:
             return ""
+        
+        # Извлечение пути и страницы из context для добавления в начало ответа
+        path_prefix = ""
+        if context:
+            # Парсим context для извлечения пути и страницы
+            path_part = None
+            page_part = None
+            
+            if "Путь:" in context:
+                path_start = context.find("Путь:") + len("Путь:")
+                path_end = context.find(";", path_start)
+                if path_end == -1:
+                    path_end = len(context)
+                path_part = context[path_start:path_end].strip()
+            
+            if "Страница:" in context:
+                page_start = context.find("Страница:") + len("Страница:")
+                page_part = context[page_start:].strip()
+            
+            # Формируем префикс пути
+            if path_part:
+                # Заменяем разделители на " > " для единообразия
+                path_formatted = path_part.replace(" > ", " > ").replace(" → ", " > ")
+                path_prefix = f"{path_formatted}"
+                if page_part:
+                    path_prefix += f". страница {page_part}."
+                else:
+                    path_prefix += "."
+                path_prefix += " "
         
         # Формирование пользовательского промпта из шаблона
         context_section = f"\n\nКонтекст: {context}" if context else ""
@@ -239,26 +271,60 @@ class LLMAdapter:
         for attempt in range(max_retries):
             try:
                 # Отправка запроса к OpenAI API с таймаутом
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
+                # Поддержка дополнительных параметров для совместимости с различными провайдерами
+                request_params = {
+                    "model": self.model,
+                    "messages": [
                         {"role": "system", "content": self.system_prompt},
                         {"role": "user", "content": user_prompt}
                     ],
-                    temperature=self.temperature,
-                    max_tokens=self.max_tokens,
-                    timeout=timeout
-                )
+                    "temperature": self.temperature,
+                    "max_tokens": self.max_tokens,
+                    "timeout": timeout
+                }
+                
+                # Дополнительные параметры из переменных окружения (для Cloud.ru и других провайдеров)
+                presence_penalty = os.getenv("OPENAI_PRESENCE_PENALTY")
+                if presence_penalty:
+                    try:
+                        request_params["presence_penalty"] = float(presence_penalty)
+                    except (ValueError, TypeError):
+                        pass
+                
+                top_p = os.getenv("OPENAI_TOP_P")
+                if top_p:
+                    try:
+                        request_params["top_p"] = float(top_p)
+                    except (ValueError, TypeError):
+                        pass
+                
+                response = self.client.chat.completions.create(**request_params)
                 
                 # Извлечение ответа
                 if response.choices and len(response.choices) > 0:
-                    return response.choices[0].message.content.strip()
+                    content = response.choices[0].message.content
+                    if content:
+                        llm_response = content.strip()
+                        # Добавляем путь в начало ответа, если он есть
+                        if path_prefix:
+                            return f"{path_prefix}{llm_response}"
+                        return llm_response
+                    else:
+                        return ""
                 else:
                     return ""
                     
             except Exception as e:
                 error_msg = str(e)
                 logger.warning(f"Попытка {attempt + 1}/{max_retries} не удалась: {error_msg}")
+                
+                # Если это ошибка модели (422), не повторяем запросы
+                if "422" in error_msg or "Invalid parameter" in error_msg or "model" in error_msg.lower():
+                    logger.error(f"Ошибка модели: {error_msg}")
+                    logger.error(f"Используемая модель: {self.model}")
+                    logger.error(f"Проверьте правильность названия модели в .env файле (OPENAI_MODEL)")
+                    logger.error(f"Для стандартного OpenAI API используйте: gpt-3.5-turbo, gpt-4, gpt-4-turbo-preview")
+                    return ""
                 
                 # Если это последняя попытка, логируем ошибку и возвращаем пустую строку
                 if attempt == max_retries - 1:
