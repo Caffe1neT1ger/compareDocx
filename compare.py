@@ -17,10 +17,13 @@
 - Полные тексты в описании различий
 """
 
-from typing import List, Dict, Tuple, Set
+from typing import List, Dict, Tuple, Set, Optional
 from docx_file import DocxFile
 import difflib
 import re
+from config import config
+from logger_config import logger
+from exceptions import ComparisonError
 
 
 class Compare:
@@ -34,7 +37,7 @@ class Compare:
     - Строятся детальные описания всех изменений
     """
     
-    def __init__(self, file1_path: str, file2_path: str):
+    def __init__(self, file1_path: str, file2_path: str, llm_adapter=None):
         """
         Инициализация класса сравнения.
         
@@ -43,14 +46,19 @@ class Compare:
         2. Сравнение абзацев
         3. Сравнение таблиц
         4. Сравнение изображений
+        5. Дополнительный анализ изменений через LLM (если адаптер предоставлен)
         
         Args:
             file1_path: Путь к первому DOCX файлу (базовый документ)
             file2_path: Путь ко второму DOCX файлу (измененный документ)
+            llm_adapter: Опциональный адаптер LLM для дополнительного анализа изменений
         """
         # Загрузка документов
         self.file1 = DocxFile(file1_path)  # Базовый документ
         self.file2 = DocxFile(file2_path)  # Измененный документ
+        
+        # LLM адаптер для дополнительного анализа
+        self.llm_adapter = llm_adapter
         
         # Результаты сравнения
         self.comparison_results = []  # Результаты сравнения абзацев
@@ -58,9 +66,27 @@ class Compare:
         self.image_changes = []  # Результаты сравнения изображений
         
         # Автоматическое выполнение сравнения при инициализации
-        self._compare_documents()  # Сравнение абзацев
-        self._compare_tables()  # Сравнение таблиц
-        self._compare_images()  # Сравнение изображений
+        try:
+            logger.info("Начало сравнения документов")
+            self._compare_documents()  # Сравнение абзацев
+            logger.debug(f"Сравнение абзацев завершено: {len(self.comparison_results)} результатов")
+            
+            self._compare_tables()  # Сравнение таблиц
+            logger.debug(f"Сравнение таблиц завершено: {len(self.table_changes)} результатов")
+            
+            self._compare_images()  # Сравнение изображений
+            logger.debug(f"Сравнение изображений завершено: {len(self.image_changes)} результатов")
+            
+            # Дополнительный анализ через LLM для измененных элементов
+            if self.llm_adapter and self.llm_adapter.is_enabled():
+                logger.info("Начало анализа изменений через LLM")
+                self._analyze_changes_with_llm()
+                logger.info("Анализ изменений через LLM завершен")
+            
+            logger.info("Сравнение документов завершено успешно")
+        except Exception as e:
+            logger.error(f"Ошибка при сравнении документов: {e}")
+            raise ComparisonError(str(e))
     
     def _normalize_text(self, text: str) -> str:
         """
@@ -87,8 +113,9 @@ class Compare:
             return ""
         
         # Примечание: регистр сохраняется для точности сравнения
-        # Раскомментируйте следующую строку, если нужно игнорировать регистр:
-        # text = text.lower()
+        # Используется настройка из конфигурации
+        if config.comparison.normalize_case:
+            text = text.lower()
         
         # Шаг 1: Замена множественных пробелов на один
         text = re.sub(r'\s+', ' ', text)
@@ -128,9 +155,9 @@ class Compare:
         if len(words) == 0:
             return ""
         
-        # Берем первые 5 и последние 5 слов
-        first_words = ' '.join(words[:5])
-        last_words = ' '.join(words[-5:]) if len(words) > 5 else ''
+        # Берем первые и последние слова согласно конфигурации
+        first_words = ' '.join(words[:config.comparison.fingerprint_first_words])
+        last_words = ' '.join(words[-config.comparison.fingerprint_last_words:]) if len(words) > config.comparison.fingerprint_last_words else ''
         
         # Также используем длину и количество слов
         length = len(normalized)
@@ -207,7 +234,8 @@ class Compare:
                         # Проверяем, действительно ли тексты идентичны
                         norm1 = normalized_texts1[idx1]
                         norm2 = normalized_texts2[idx2]
-                        if norm1 == norm2 or self._calculate_similarity(norm1, norm2) >= 0.95:
+                        similarity_check = self._calculate_similarity(norm1, norm2)
+                        if norm1 == norm2 or similarity_check >= config.comparison.similarity_threshold_high:
                             if idx1 not in match_map:
                                 match_map[idx1] = idx2
                                 matched_indices_1.add(idx1)
@@ -235,7 +263,8 @@ class Compare:
                 "similarity": 0.0,
                 "differences": [],
                 "change_description": "",
-                "change_type": ""  # Тип исправления
+                "change_type": "",  # Тип исправления
+                "llm_response": ""  # Ответ от LLM
             }
             
             if idx1 in match_map:
@@ -253,10 +282,11 @@ class Compare:
                 similarity = self._calculate_similarity(para1["text"], para2["text"])
                 result["similarity"] = similarity
                 
-                if similarity == 1.0:
+                # Использование порогов из конфигурации
+                if similarity >= config.comparison.similarity_threshold_identical:
                     result["status"] = "identical"
                     result["change_type"] = "Без изменений"
-                elif similarity >= 0.8:
+                elif similarity >= config.comparison.similarity_threshold_medium:
                     result["status"] = "modified"
                     result["differences"] = self._get_differences(para1["text"], para2["text"])
                     result["change_description"] = self._build_change_description(result)
@@ -274,7 +304,7 @@ class Compare:
                     normalized_text1, paragraphs2, normalized_texts2, matched_indices_2
                 )
                 
-                if best_similarity >= 0.6:
+                if best_similarity >= config.comparison.similarity_threshold_low:
                     para2 = paragraphs2[best_match_idx]
                     result["index_2"] = best_match_idx + 1
                     result["text_2"] = para2["text"]
@@ -316,7 +346,8 @@ class Compare:
                     "status": "added",
                     "similarity": 0.0,
                     "differences": [],
-                    "change_description": ""
+                    "change_description": "",
+                    "llm_response": ""  # Ответ от LLM
                 }
                 result["change_description"] = self._build_change_description(result)
                 result["change_type"] = "Добавлен"
@@ -674,18 +705,21 @@ class Compare:
             return "Изменения не обнаружены"
         
         descriptions = []
-        # Ограничиваем количество для читаемости (первые 5 изменений)
-        for change in cell_changes[:5]:
+        # Ограничиваем количество для читаемости (используем конфигурацию)
+        max_display = config.excel.max_differences_display
+        max_length = config.excel.max_cell_value_length
+        
+        for change in cell_changes[:max_display]:
             # Обрезаем длинные значения для компактности
-            old_val = change["old_value"][:50] if change["old_value"] else "пусто"
-            new_val = change["new_value"][:50] if change["new_value"] else "пусто"
+            old_val = change["old_value"][:max_length] if change["old_value"] else "пусто"
+            new_val = change["new_value"][:max_length] if change["new_value"] else "пусто"
             descriptions.append(
                 f"Строка {change['row']}, столбец {change['col']}: '{old_val}' изменено на '{new_val}'"
             )
         
-        # Если изменений больше 5, добавляем информацию об остальных
-        if len(cell_changes) > 5:
-            descriptions.append(f"... и еще {len(cell_changes) - 5} изменений")
+        # Если изменений больше максимума, добавляем информацию об остальных
+        if len(cell_changes) > max_display:
+            descriptions.append(f"... и еще {len(cell_changes) - max_display} изменений")
         
         return "; ".join(descriptions)
     
@@ -697,8 +731,9 @@ class Compare:
         # Получаем названия изображений из предыдущих абзацев
         def get_image_name(img_index, paragraphs, is_first_doc):
             # Ищем абзац перед изображением с текстом "Рисунок"
-            # Ищем в последних 10 абзацах перед предполагаемой позицией изображения
-            search_start = max(0, img_index * 3 - 10)
+            # Ищем в последних N абзацах перед предполагаемой позицией изображения
+            search_backward = config.document.search_backward_paragraphs
+            search_start = max(0, img_index * 3 - search_backward)
             for para in reversed(paragraphs[search_start:img_index * 3]):
                 text = para.get("text", "").strip()
                 if text and ("рисунок" in text.lower() or "рис." in text.lower()):
@@ -974,6 +1009,71 @@ class Compare:
         """
         return self.image_changes
     
+    def _analyze_changes_with_llm(self):
+        """
+        Дополнительный анализ изменений через LLM для измененных, добавленных и удаленных элементов.
+        
+        Вызывается автоматически после основного сравнения, если LLM адаптер доступен.
+        Анализирует только элементы с изменениями (modified, added, deleted),
+        пропуская идентичные элементы для оптимизации.
+        """
+        if not self.llm_adapter or not self.llm_adapter.is_enabled():
+            return
+        
+        print("\nВыполнение дополнительного анализа изменений через LLM...")
+        
+        # Фильтруем только элементы с изменениями
+        changed_results = [
+            r for r in self.comparison_results 
+            if r["status"] in ["modified", "added", "deleted"]
+        ]
+        
+        total_changed = len(changed_results)
+        if total_changed == 0:
+            print("Нет изменений для анализа через LLM.")
+            return
+        
+        print(f"Анализ {total_changed} измененных элементов...")
+        
+        # Анализ каждого измененного элемента
+        for idx, result in enumerate(changed_results, 1):
+            if idx % 10 == 0:
+                print(f"Обработано {idx}/{total_changed} элементов...")
+            
+            status = result["status"]
+            text1 = result.get("text_1", "") or ""
+            text2 = result.get("text_2", "") or ""
+            
+            # Формирование контекста для LLM
+            context_parts = []
+            full_path = result.get("full_path_2") or result.get("full_path_1") or ""
+            if full_path:
+                context_parts.append(f"Путь: {full_path}")
+            
+            page = result.get("page_2") or result.get("page_1")
+            if page:
+                context_parts.append(f"Страница: {page}")
+            
+            context = "; ".join(context_parts) if context_parts else None
+            
+            # Анализ в зависимости от статуса
+            if status == "modified" and text1 and text2:
+                # Для измененных элементов - сравниваем оба текста
+                llm_response = self.llm_adapter.analyze_changes(text1, text2, context)
+                result["llm_response"] = llm_response
+                
+            elif status == "added" and text2:
+                # Для добавленных элементов - анализируем новый текст
+                llm_response = self.llm_adapter.analyze_changes("", text2, context)
+                result["llm_response"] = llm_response
+                
+            elif status == "deleted" and text1:
+                # Для удаленных элементов - анализируем старый текст
+                llm_response = self.llm_adapter.analyze_changes(text1, "", context)
+                result["llm_response"] = llm_response
+        
+        print(f"Анализ через LLM завершен. Обработано {total_changed} элементов.")
+    
     def get_statistics(self) -> Dict:
         """
         Получить статистику сравнения.
@@ -987,6 +1087,19 @@ class Compare:
         added = sum(1 for r in self.comparison_results if r["status"] == "added")
         deleted = sum(1 for r in self.comparison_results if r["status"] == "deleted")
         
+        # Статистика по LLM анализу
+        llm_analyzed = sum(1 for r in self.comparison_results if r.get("llm_response"))
+        
+        # Статистика по таблицам
+        tables1 = self.file1.get_tables()
+        tables2 = self.file2.get_tables()
+        tables_changed = len([t for t in self.table_changes if t["status"] != "identical"])
+        
+        # Статистика по изображениям
+        images1 = self.file1.get_images()
+        images2 = self.file2.get_images()
+        images_changed = len([i for i in self.image_changes if i["status"] != "identical"])
+        
         return {
             "total": total,
             "identical": identical,
@@ -997,7 +1110,12 @@ class Compare:
             "modified_percent": (modified / total * 100) if total > 0 else 0,
             "added_percent": (added / total * 100) if total > 0 else 0,
             "deleted_percent": (deleted / total * 100) if total > 0 else 0,
-            "tables_changed": len([t for t in self.table_changes if t["status"] != "identical"]),
-            "images_changed": len([i for i in self.image_changes if i["status"] != "identical"])
+            "tables_total_1": len(tables1),
+            "tables_total_2": len(tables2),
+            "tables_changed": tables_changed,
+            "images_total_1": len(images1),
+            "images_total_2": len(images2),
+            "images_changed": images_changed,
+            "llm_analyzed": llm_analyzed
         }
 

@@ -103,7 +103,7 @@ def create_extended_document_1():
     # Изображение 1
     doc.add_paragraph()
     doc.add_paragraph('Рисунок 1.1 - Схема архитектуры системы:')
-    img1_path = create_simple_image(500, 300, 'lightblue', 'Архитектура v1.0', 'documents/temp_img_ext1_1.png')
+    img1_path = create_simple_image(500, 300, 'lightblue', 'Архитектура v1.0', '../documents/temp_img_ext1_1.png')
     doc.add_picture(img1_path, width=Inches(5))
     
     # Раздел 2
@@ -154,7 +154,7 @@ def create_extended_document_1():
     # Изображение 2
     doc.add_paragraph()
     doc.add_paragraph('Рисунок 2.1 - Схема масштабирования:')
-    img2_path = create_simple_image(400, 250, 'lightgreen', 'Масштабирование', 'documents/temp_img_ext1_2.png')
+    img2_path = create_simple_image(400, 250, 'lightgreen', 'Масштабирование', '../documents/temp_img_ext1_2.png')
     doc.add_picture(img2_path, width=Inches(4))
     
     # Раздел 3
@@ -228,7 +228,7 @@ def create_extended_document_1():
     # Изображение 3
     doc.add_paragraph()
     doc.add_paragraph('Рисунок 3.1 - Схема маршрутизации документов:')
-    img3_path = create_simple_image(450, 300, 'lightyellow', 'Маршрутизация', 'documents/temp_img_ext1_3.png')
+    img3_path = create_simple_image(450, 300, 'lightyellow', 'Маршрутизация', '../documents/temp_img_ext1_3.png')
     doc.add_picture(img3_path, width=Inches(4.5))
     
     doc.add_heading('3.3. Модуль отчетности', 2)
@@ -300,7 +300,7 @@ def create_extended_document_1():
     # Изображение 4
     doc.add_paragraph()
     doc.add_paragraph('Рисунок 4.1 - Схема развертывания:')
-    img4_path = create_simple_image(500, 350, 'lightcoral', 'Развертывание', 'documents/temp_img_ext1_4.png')
+    img4_path = create_simple_image(500, 350, 'lightcoral', 'Развертывание', '../documents/temp_img_ext1_4.png')
     doc.add_picture(img4_path, width=Inches(5))
     
     # Раздел 5
@@ -360,7 +360,7 @@ def create_extended_document_1():
     # Изображение 5
     doc.add_paragraph()
     doc.add_paragraph('Рисунок 6.1 - Схема безопасности:')
-    img5_path = create_simple_image(400, 300, 'lightpink', 'Безопасность', 'documents/temp_img_ext1_5.png')
+    img5_path = create_simple_image(400, 300, 'lightpink', 'Безопасность', '../documents/temp_img_ext1_5.png')
     doc.add_picture(img5_path, width=Inches(4))
     
     # Раздел 7
@@ -405,7 +405,7 @@ def create_extended_document_1():
     # Изображение 6
     doc.add_paragraph()
     doc.add_paragraph('Рисунок 7.1 - Диаграмма Ганта:')
-    img6_path = create_simple_image(600, 200, 'lightcyan', 'Диаграмма Ганта', 'documents/temp_img_ext1_6.png')
+    img6_path = create_simple_image(600, 200, 'lightcyan', 'Диаграмма Ганта', '../documents/temp_img_ext1_6.png')
     doc.add_picture(img6_path, width=Inches(6))
     
     # Раздел 8
@@ -424,16 +424,16 @@ def create_extended_document_1():
     
     # Удаление временных файлов
     temp_files = [
-        'documents/temp_img_ext1_1.png', 'documents/temp_img_ext1_2.png',
-        'documents/temp_img_ext1_3.png', 'documents/temp_img_ext1_4.png',
-        'documents/temp_img_ext1_5.png', 'documents/temp_img_ext1_6.png'
+        '../documents/temp_img_ext1_1.png', '../documents/temp_img_ext1_2.png',
+        '../documents/temp_img_ext1_3.png', '../documents/temp_img_ext1_4.png',
+        '../documents/temp_img_ext1_5.png', '../documents/temp_img_ext1_6.png'
     ]
     for f in temp_files:
         if os.path.exists(f):
             os.remove(f)
     
-    doc.save('documents/extended_test_document_1.docx')
-    print("Создан файл: documents/extended_test_document_1.docx")
+    doc.save('../documents/extended_test_document_1.docx')
+    print("Создан файл: ../documents/extended_test_document_1.docx")
 
 
 def create_extended_document_2():
@@ -516,7 +516,7 @@ def create_extended_document_2():
     # Изображение 1 (измененное)
     doc.add_paragraph()
     doc.add_paragraph('Рисунок 1.1 - Схема архитектуры системы:')
-    img1_path = create_simple_image(500, 300, 'lightgreen', 'Архитектура v2.0', 'documents/temp_img_ext2_1.png')  # Изменен цвет и текст
+    img1_path = create_simple_image(500, 300, 'lightgreen', 'Архитектура v2.0', '../documents/temp_img_ext2_1.png')  # Изменен цвет и текст
     doc.add_picture(img1_path, width=Inches(5))
     
     # Раздел 2 (с изменениями)
@@ -571,13 +571,13 @@ def create_extended_document_2():
     # Изображение 2 (новое)
     doc.add_paragraph()
     doc.add_paragraph('Рисунок 2.1 - Схема масштабирования:')
-    img2_path = create_simple_image(400, 250, 'lightblue', 'Масштабирование v2', 'documents/temp_img_ext2_2.png')
+    img2_path = create_simple_image(400, 250, 'lightblue', 'Масштабирование v2', '../documents/temp_img_ext2_2.png')
     doc.add_picture(img2_path, width=Inches(4))
     
     # Новое изображение
     doc.add_paragraph()
     doc.add_paragraph('Рисунок 2.2 - Схема кластеризации:')
-    img2_2_path = create_simple_image(350, 200, 'lightyellow', 'Кластер', 'documents/temp_img_ext2_2_2.png')
+    img2_2_path = create_simple_image(350, 200, 'lightyellow', 'Кластер', '../documents/temp_img_ext2_2_2.png')
     doc.add_picture(img2_2_path, width=Inches(3.5))
     
     # Раздел 3 (с изменениями)
@@ -658,7 +658,7 @@ def create_extended_document_2():
     # Изображение 3 (измененное)
     doc.add_paragraph()
     doc.add_paragraph('Рисунок 3.1 - Схема маршрутизации документов:')
-    img3_path = create_simple_image(450, 300, 'lightcoral', 'Маршрутизация v2', 'documents/temp_img_ext2_3.png')  # Изменен цвет
+    img3_path = create_simple_image(450, 300, 'lightcoral', 'Маршрутизация v2', '../documents/temp_img_ext2_3.png')  # Изменен цвет
     doc.add_picture(img3_path, width=Inches(4.5))
     
     doc.add_heading('3.3. Модуль отчетности', 2)
@@ -734,7 +734,7 @@ def create_extended_document_2():
     # Изображение 4 (измененное)
     doc.add_paragraph()
     doc.add_paragraph('Рисунок 4.1 - Схема развертывания:')
-    img4_path = create_simple_image(500, 350, 'lightpink', 'Развертывание v2', 'documents/temp_img_ext2_4.png')  # Изменен цвет
+    img4_path = create_simple_image(500, 350, 'lightpink', 'Развертывание v2', '../documents/temp_img_ext2_4.png')  # Изменен цвет
     doc.add_picture(img4_path, width=Inches(5))
     
     # Раздел 5 (с изменениями)
@@ -798,7 +798,7 @@ def create_extended_document_2():
     # Изображение 5 (измененное)
     doc.add_paragraph()
     doc.add_paragraph('Рисунок 6.1 - Схема безопасности:')
-    img5_path = create_simple_image(400, 300, 'lightcyan', 'Безопасность v2', 'documents/temp_img_ext2_5.png')  # Изменен цвет
+    img5_path = create_simple_image(400, 300, 'lightcyan', 'Безопасность v2', '../documents/temp_img_ext2_5.png')  # Изменен цвет
     doc.add_picture(img5_path, width=Inches(4))
     
     # Раздел 7 (с изменениями)
@@ -845,7 +845,7 @@ def create_extended_document_2():
     # Изображение 6 (измененное)
     doc.add_paragraph()
     doc.add_paragraph('Рисунок 7.1 - Диаграмма Ганта:')
-    img6_path = create_simple_image(600, 200, 'lightsteelblue', 'Диаграмма Ганта v2', 'documents/temp_img_ext2_6.png')  # Изменен цвет
+    img6_path = create_simple_image(600, 200, 'lightsteelblue', 'Диаграмма Ганта v2', '../documents/temp_img_ext2_6.png')  # Изменен цвет
     doc.add_picture(img6_path, width=Inches(6))
     
     # Новый раздел 8
@@ -881,7 +881,7 @@ def create_extended_document_2():
     # Изображение 7 (новое)
     doc.add_paragraph()
     doc.add_paragraph('Рисунок 8.1 - Схема интеграций:')
-    img7_path = create_simple_image(500, 300, 'lightgoldenrodyellow', 'Интеграции', 'documents/temp_img_ext2_7.png')
+    img7_path = create_simple_image(500, 300, 'lightgoldenrodyellow', 'Интеграции', '../documents/temp_img_ext2_7.png')
     doc.add_picture(img7_path, width=Inches(5))
     
     # Раздел 9 (было 8)
@@ -901,17 +901,17 @@ def create_extended_document_2():
     
     # Удаление временных файлов
     temp_files = [
-        'documents/temp_img_ext2_1.png', 'documents/temp_img_ext2_2.png',
-        'documents/temp_img_ext2_2_2.png', 'documents/temp_img_ext2_3.png',
-        'documents/temp_img_ext2_4.png', 'documents/temp_img_ext2_5.png',
-        'documents/temp_img_ext2_6.png', 'documents/temp_img_ext2_7.png'
+        '../documents/temp_img_ext2_1.png', '../documents/temp_img_ext2_2.png',
+        '../documents/temp_img_ext2_2_2.png', '../documents/temp_img_ext2_3.png',
+        '../documents/temp_img_ext2_4.png', '../documents/temp_img_ext2_5.png',
+        '../documents/temp_img_ext2_6.png', '../documents/temp_img_ext2_7.png'
     ]
     for f in temp_files:
         if os.path.exists(f):
             os.remove(f)
     
-    doc.save('documents/extended_test_document_2.docx')
-    print("Создан файл: documents/extended_test_document_2.docx")
+    doc.save('../documents/extended_test_document_2.docx')
+    print("Создан файл: ../documents/extended_test_document_2.docx")
 
 
 if __name__ == "__main__":
@@ -924,8 +924,8 @@ if __name__ == "__main__":
     print("=" * 60)
     print("Все масштабные тестовые документы созданы успешно!")
     print("\nСозданные файлы:")
-    print("  - documents/extended_test_document_1.docx (базовый документ)")
-    print("  - documents/extended_test_document_2.docx (версия с изменениями)")
+    print("  - ../documents/extended_test_document_1.docx (базовый документ)")
+    print("  - ../documents/extended_test_document_2.docx (версия с изменениями)")
     print("\nХарактеристики документов:")
     print("  - 8-9 разделов")
     print("  - Множество подразделов и пунктов")

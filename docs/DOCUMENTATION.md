@@ -64,12 +64,14 @@ compareDocx/
 ├── main.py                    # Точка входа в программу
 ├── requirements.txt           # Зависимости проекта
 ├── README.md                  # Краткая документация
-├── DOCUMENTATION.md           # Полная документация (этот файл)
-├── CUSTOM_STYLES_SUPPORT.md   # Документация по кастомным стилям
-├── CONTENT_BASED_COMPARISON.md # Документация по сравнению по содержимому
-├── create_test_documents.py   # Скрипт создания базовых тестовых документов
-├── create_extended_test_documents.py  # Скрипт создания масштабных документов
-├── create_additional_test_documents.py # Скрипт создания дополнительных документов
+├── docs/                      # Папка с документацией
+│   ├── DOCUMENTATION.md       # Полная документация (этот файл)
+│   ├── CUSTOM_STYLES_SUPPORT.md   # Документация по кастомным стилям
+│   └── CONTENT_BASED_COMPARISON.md # Документация по сравнению по содержимому
+├── tests/                      # Папка со скриптами для создания тестовых документов
+│   ├── create_test_documents.py   # Скрипт создания базовых тестовых документов
+│   ├── create_extended_test_documents.py  # Скрипт создания масштабных документов
+│   └── create_additional_test_documents.py # Скрипт создания дополнительных документов
 ├── documents/                 # Папка с тестовыми документами
 │   ├── test_document_1.docx
 │   ├── test_document_2.docx

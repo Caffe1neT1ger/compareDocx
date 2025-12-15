@@ -20,6 +20,9 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from typing import List, Dict
 from datetime import datetime
+from config import config
+from logger_config import logger
+from exceptions import ExportError
 
 
 class ExcelExporter:
@@ -105,7 +108,8 @@ class ExcelExporter:
             f"Текст ({file2_name})",
             "Схожесть (%)",
             "Различия",
-            "Описание изменений"
+            "Описание изменений",
+            "Ответ LLM"
         ]
         
         # Стили
@@ -163,7 +167,8 @@ class ExcelExporter:
                 result.get("text_2") or "",  # Текст 2
                 f"{result['similarity'] * 100:.1f}%" if result.get("similarity") else "",  # Схожесть
                 "\n".join(result.get("differences", []))[:1000],  # Различия (увеличено для полных текстов)
-                result.get("change_description", "")  # Описание изменений
+                result.get("change_description", ""),  # Описание изменений
+                result.get("llm_response", "")  # Ответ LLM
             ]
             
             for col_idx, value in enumerate(row_data, 1):
@@ -187,7 +192,8 @@ class ExcelExporter:
             'K': 50,  # Текст 2
             'L': 12,  # Схожесть
             'M': 60,  # Различия
-            'N': 60   # Описание изменений
+            'N': 60,  # Описание изменений
+            'O': 60   # Ответ LLM
         }
         
         for col, width in column_widths.items():
@@ -245,8 +251,19 @@ class ExcelExporter:
             ("Измененных", f"{statistics.get('modified', 0)} ({statistics.get('modified_percent', 0):.1f}%)"),
             ("Добавленных", f"{statistics.get('added', 0)} ({statistics.get('added_percent', 0):.1f}%)"),
             ("Удаленных", f"{statistics.get('deleted', 0)} ({statistics.get('deleted_percent', 0):.1f}%)"),
-            ("Изменено таблиц", statistics.get("tables_changed", 0)),
-            ("Изменено изображений", statistics.get("images_changed", 0))
+            ("", ""),  # Пустая строка для разделения
+            ("Таблицы", ""),
+            ("  Всего таблиц в документе 1", statistics.get("tables_total_1", "N/A")),
+            ("  Всего таблиц в документе 2", statistics.get("tables_total_2", "N/A")),
+            ("  Изменено таблиц", statistics.get("tables_changed", 0)),
+            ("", ""),  # Пустая строка для разделения
+            ("Изображения", ""),
+            ("  Всего изображений в документе 1", statistics.get("images_total_1", "N/A")),
+            ("  Всего изображений в документе 2", statistics.get("images_total_2", "N/A")),
+            ("  Изменено изображений", statistics.get("images_changed", 0)),
+            ("", ""),  # Пустая строка для разделения
+            ("LLM анализ", ""),
+            ("  Проанализировано элементов", statistics.get("llm_analyzed", 0))
         ]
         
         for stat_name, stat_value in stats_data:

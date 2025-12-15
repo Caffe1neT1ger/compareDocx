@@ -142,7 +142,7 @@ def create_additional_document_1():
     # Изображение 1
     doc.add_paragraph()
     doc.add_paragraph('Рисунок 2.1 - Архитектура системы:')
-    img1_path = create_simple_image(500, 300, 'lightblue', 'Архитектура v3.0', 'documents/temp_img_add1_1.png')
+    img1_path = create_simple_image(500, 300, 'lightblue', 'Архитектура v3.0', '../documents/temp_img_add1_1.png')
     doc.add_picture(img1_path, width=Inches(5))
     
     # Раздел 3
@@ -195,7 +195,7 @@ def create_additional_document_1():
     # Изображение 2
     doc.add_paragraph()
     doc.add_paragraph('Рисунок 3.1 - Схема модулей:')
-    img2_path = create_simple_image(450, 250, 'lightgreen', 'Модули системы', 'documents/temp_img_add1_2.png')
+    img2_path = create_simple_image(450, 250, 'lightgreen', 'Модули системы', '../documents/temp_img_add1_2.png')
     doc.add_picture(img2_path, width=Inches(4.5))
     
     # Раздел 4
@@ -251,15 +251,15 @@ def create_additional_document_1():
     
     # Удаление временных файлов
     temp_files = [
-        'documents/temp_img_add1_1.png',
-        'documents/temp_img_add1_2.png'
+        '../documents/temp_img_add1_1.png',
+        '../documents/temp_img_add1_2.png'
     ]
     for f in temp_files:
         if os.path.exists(f):
             os.remove(f)
     
-    doc.save('documents/additional_test_document_1.docx')
-    print("Создан файл: documents/additional_test_document_1.docx")
+    doc.save('../documents/additional_test_document_1.docx')
+    print("Создан файл: ../documents/additional_test_document_1.docx")
 
 
 def create_additional_document_2():
@@ -380,7 +380,7 @@ def create_additional_document_2():
     # Изображение 1 (измененное)
     doc.add_paragraph()
     doc.add_paragraph('Рисунок 2.1 - Архитектура системы:')
-    img1_path = create_simple_image(500, 300, 'lightgreen', 'Архитектура v3.1', 'documents/temp_img_add2_1.png')  # Изменен цвет и текст
+    img1_path = create_simple_image(500, 300, 'lightgreen', 'Архитектура v3.1', '../documents/temp_img_add2_1.png')  # Изменен цвет и текст
     doc.add_picture(img1_path, width=Inches(5))
     
     # Раздел 3
@@ -434,13 +434,13 @@ def create_additional_document_2():
     # Изображение 2 (измененное)
     doc.add_paragraph()
     doc.add_paragraph('Рисунок 3.1 - Схема модулей:')
-    img2_path = create_simple_image(450, 250, 'lightyellow', 'Модули системы v2', 'documents/temp_img_add2_2.png')  # Изменен цвет и текст
+    img2_path = create_simple_image(450, 250, 'lightyellow', 'Модули системы v2', '../documents/temp_img_add2_2.png')  # Изменен цвет и текст
     doc.add_picture(img2_path, width=Inches(4.5))
     
     # Новое изображение
     doc.add_paragraph()
     doc.add_paragraph('Рисунок 3.2 - Диаграмма взаимодействия:')
-    img3_path = create_simple_image(400, 200, 'lightcoral', 'Взаимодействие', 'documents/temp_img_add2_3.png')
+    img3_path = create_simple_image(400, 200, 'lightcoral', 'Взаимодействие', '../documents/temp_img_add2_3.png')
     doc.add_picture(img3_path, width=Inches(4))
     
     # Раздел 4
@@ -496,16 +496,16 @@ def create_additional_document_2():
     
     # Удаление временных файлов
     temp_files = [
-        'documents/temp_img_add2_1.png',
-        'documents/temp_img_add2_2.png',
-        'documents/temp_img_add2_3.png'
+        '../documents/temp_img_add2_1.png',
+        '../documents/temp_img_add2_2.png',
+        '../documents/temp_img_add2_3.png'
     ]
     for f in temp_files:
         if os.path.exists(f):
             os.remove(f)
     
-    doc.save('documents/additional_test_document_2.docx')
-    print("Создан файл: documents/additional_test_document_2.docx")
+    doc.save('../documents/additional_test_document_2.docx')
+    print("Создан файл: ../documents/additional_test_document_2.docx")
 
 
 if __name__ == "__main__":
@@ -518,8 +518,8 @@ if __name__ == "__main__":
     print("=" * 70)
     print("Все дополнительные тестовые документы созданы успешно!")
     print("\nСозданные файлы:")
-    print("  - documents/additional_test_document_1.docx (базовый документ с кастомными стилями)")
-    print("  - documents/additional_test_document_2.docx (версия с изменениями и разными стилями)")
+    print("  - ../documents/additional_test_document_1.docx (базовый документ с кастомными стилями)")
+    print("  - ../documents/additional_test_document_2.docx (версия с изменениями и разными стилями)")
     print("\nОсобенности документов:")
     print("  - Использование кастомных стилей (не стандартные Heading)")
     print("  - Разное форматирование (размеры шрифтов, цвета, подчеркивание)")

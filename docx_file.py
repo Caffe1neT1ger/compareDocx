@@ -11,6 +11,10 @@ from typing import List, Dict, Optional, Tuple
 import re
 import hashlib
 import io
+from config import config
+from logger_config import logger
+from exceptions import DocumentLoadError, DocumentParseError, ValidationError
+from validators import validate_file_size, validate_document_structure
 
 
 class DocxFile:
@@ -22,16 +26,46 @@ class DocxFile:
         
         Args:
             file_path: Путь к DOCX файлу
+        
+        Raises:
+            DocumentLoadError: Если не удалось загрузить документ
+            DocumentParseError: Если произошла ошибка при парсинге
         """
         self.file_path = file_path
-        self.document = Document(file_path)
+        
+        # Валидация размера файла
+        try:
+            from pathlib import Path
+            validate_file_size(Path(file_path))
+        except Exception as e:
+            logger.error(f"Ошибка валидации файла {file_path}: {e}")
+            raise DocumentLoadError(file_path, str(e))
+        
+        # Загрузка документа
+        try:
+            self.document = Document(file_path)
+            logger.debug(f"Документ загружен: {file_path}")
+        except Exception as e:
+            logger.error(f"Ошибка загрузки документа {file_path}: {e}")
+            raise DocumentLoadError(file_path, str(e))
+        
         self.paragraphs = []
         self.sections = []
         self.chapters = []
         self.tables = []
         self.images = []
         self.hierarchy_stack = []  # Стек для построения иерархии
-        self._parse_document()
+        
+        # Парсинг документа
+        try:
+            self._parse_document()
+            logger.info(
+                f"Документ распарсен: {len(self.paragraphs)} абзацев, "
+                f"{len(self.tables)} таблиц, {len(self.images)} изображений"
+            )
+        except Exception as e:
+            logger.error(f"Ошибка парсинга документа {file_path}: {e}")
+            raise DocumentParseError(file_path, str(e))
     
     def _parse_document(self):
         """Парсинг документа: извлечение абзацев, разделов, глав, таблиц и изображений."""
@@ -40,14 +74,27 @@ class DocxFile:
         section_index = 0
         chapter_index = 0
         paragraph_index = 0
-        estimated_page = 1
-        chars_per_page = 2000  # Примерное количество символов на страницу
+        chars_per_page = config.document.chars_per_page
         
         # Парсинг таблиц
         self._parse_tables()
         
         # Парсинг изображений
         self._parse_images()
+        
+        # Валидация структуры документа
+        try:
+            validate_document_structure(
+                len(self.document.paragraphs),
+                len(self.tables),
+                len(self.images)
+            )
+        except ValidationError as e:
+            logger.warning(f"Предупреждение о структуре документа: {e}")
+            # Продолжаем работу, но логируем предупреждение
+        
+        # Оптимизация: вычисляем накопленную длину символов один раз
+        total_chars = 0
         
         # Парсинг абзацев
         for para in self.document.paragraphs:
@@ -110,8 +157,8 @@ class DocxFile:
                 else:
                     self.chapters.append(current_chapter)
             
-            # Вычисление примерной страницы
-            total_chars = sum(len(p["text"]) for p in self.paragraphs)
+            # Оптимизация: вычисляем страницу на основе накопленной длины
+            total_chars += len(text)
             estimated_page = max(1, (total_chars // chars_per_page) + 1)
             
             # Построение полного пути

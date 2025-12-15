@@ -85,6 +85,7 @@ python main.py documents/extended_test_document_1.docx documents/extended_test_d
 ### Базовые тестовые документы
 Для создания базовых тестовых документов используйте скрипт:
 ```bash
+cd tests
 python create_test_documents.py
 ```
 Скрипт создаст три тестовых документа (test_document_1.docx, test_document_2.docx, test_document_3.docx).
@@ -92,7 +93,16 @@ python create_test_documents.py
 ### Масштабные тестовые документы
 Для создания масштабных тестовых документов используйте скрипт:
 ```bash
+cd tests
 python create_extended_test_documents.py
 ```
 Скрипт создаст два больших тестовых документа (extended_test_document_1.docx, extended_test_document_2.docx) с множеством разделов, таблиц и изображений.
+
+### Дополнительные тестовые документы
+Для создания дополнительных тестовых документов с кастомными стилями используйте скрипт:
+```bash
+cd tests
+python create_additional_test_documents.py
+```
+Скрипт создаст два документа (additional_test_document_1.docx, additional_test_document_2.docx) с кастомными стилями для тестирования сравнения по содержимому.
 

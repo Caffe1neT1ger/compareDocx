@@ -16,6 +16,10 @@ import os
 from pathlib import Path
 from compare import Compare
 from excel_export import ExcelExporter
+from llm_adapter import LLMAdapter
+from validators import validate_file_path, validate_output_path
+from logger_config import logger
+from exceptions import CompareDocxError
 
 
 def main():
@@ -33,6 +37,9 @@ def main():
     Returns:
         int: Код возврата (0 - успех, 1 - ошибка)
     """
+    logger.info("=" * 60)
+    logger.info("Сравнение DOCX документов")
+    logger.info("=" * 60)
     print("=" * 60)
     print("Сравнение DOCX документов")
     print("=" * 60)
@@ -53,13 +60,16 @@ def main():
         if not output_path:
             output_path = "comparison_result.xlsx"
     
-    # Проверка существования файлов
-    if not os.path.exists(file1_path):
-        print(f"Ошибка: Файл '{file1_path}' не найден!")
-        return 1
-    
-    if not os.path.exists(file2_path):
-        print(f"Ошибка: Файл '{file2_path}' не найден!")
+    # Валидация путей к файлам
+    try:
+        file1_path, file1_path_obj = validate_file_path(file1_path)
+        file2_path, file2_path_obj = validate_file_path(file2_path)
+        output_path_obj = validate_output_path(output_path)
+        output_path = str(output_path_obj)
+        logger.info(f"Валидация файлов успешна")
+    except CompareDocxError as e:
+        logger.error(f"Ошибка валидации: {e}")
+        print(f"\nОшибка: {e}")
         return 1
     
     try:
@@ -68,14 +78,37 @@ def main():
         print(f"Файл 1: {os.path.basename(file1_path)}")
         print(f"Файл 2: {os.path.basename(file2_path)}")
         
+        # Шаг 1.5: Инициализация LLM адаптера (опционально)
+        # Конфигурация читается из .env файла или переменных окружения
+        # См. .env.example для примера настройки
+        llm_adapter = None
+        try:
+            llm_adapter = LLMAdapter()  # Читает конфигурацию из .env или переменных окружения
+            if llm_adapter.is_enabled():
+                model_info = llm_adapter.get_model_info()
+                print(f"\nLLM адаптер инициализирован.")
+                print(f"  Модель: {model_info['model']}")
+                print(f"  Температура: {model_info['temperature']}")
+                print(f"  Макс. токенов: {model_info['max_tokens']}")
+                print("Будет выполнен дополнительный анализ изменений.")
+            else:
+                print("\nLLM адаптер недоступен. Сравнение будет выполнено без LLM анализа.")
+                print("Для включения LLM анализа создайте файл .env с настройками (см. .env.example)")
+                llm_adapter = None
+        except Exception as e:
+            print(f"\nПредупреждение: не удалось инициализировать LLM адаптер: {e}")
+            print("Сравнение будет выполнено без LLM анализа.")
+            llm_adapter = None
+        
         # Шаг 2: Сравнение документов
         # При создании объекта Compare автоматически выполняется:
         # - Парсинг обоих документов
         # - Сравнение абзацев
         # - Сравнение таблиц
         # - Сравнение изображений
+        # - Дополнительный анализ через LLM (если адаптер доступен)
         print("\nВыполнение сравнения...")
-        comparator = Compare(file1_path, file2_path)
+        comparator = Compare(file1_path, file2_path, llm_adapter=llm_adapter)
         
         # Шаг 3: Получение результатов
         results = comparator.get_comparison_results()  # Результаты сравнения абзацев
@@ -94,6 +127,11 @@ def main():
             print(f"\nИзменений в таблицах: {len(table_changes)}")
         if image_changes:
             print(f"Изменений в изображениях: {len(image_changes)}")
+        
+        if llm_adapter and llm_adapter.is_enabled():
+            llm_analyzed = statistics.get("llm_analyzed", 0)
+            if llm_analyzed > 0:
+                print(f"Проанализировано через LLM: {llm_analyzed} элементов")
         
         # Шаг 5: Экспорт в Excel
         print(f"\nЭкспорт результатов в Excel...")

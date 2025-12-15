@@ -128,7 +128,7 @@ def create_test_document_1():
     draw.text((150, 110), 'документооборотом', fill='black')
     
     # Сохраняем изображение во временный файл
-    img_path = 'documents/temp_img_1.png'
+    img_path = '../documents/temp_img_1.png'
     img.save(img_path)
     
     # Добавляем изображение в документ
@@ -147,8 +147,8 @@ def create_test_document_1():
     if os.path.exists(img_path):
         os.remove(img_path)
     
-    doc.save('documents/test_document_1.docx')
-    print("Создан файл: documents/test_document_1.docx")
+    doc.save('../documents/test_document_1.docx')
+    print("Создан файл: ../documents/test_document_1.docx")
 
 
 def create_test_document_2():
@@ -298,7 +298,7 @@ def create_test_document_2():
     draw.text((150, 110), 'документооборотом v2.0', fill='black')  # Добавлен текст версии
     
     # Сохраняем изображение во временный файл
-    img_path = 'documents/temp_img_2.png'
+    img_path = '../documents/temp_img_2.png'
     img.save(img_path)
     
     # Добавляем изображение в документ
@@ -313,7 +313,7 @@ def create_test_document_2():
     draw2.ellipse([50, 30, 250, 120], outline='black', width=2)
     draw2.text((100, 65), 'Процесс', fill='black')
     
-    img2_path = 'documents/temp_img_2_2.png'
+    img2_path = '../documents/temp_img_2_2.png'
     img2.save(img2_path)
     doc.add_picture(img2_path, width=Inches(3))
     
@@ -335,8 +335,8 @@ def create_test_document_2():
         if os.path.exists(img_file):
             os.remove(img_file)
     
-    doc.save('documents/test_document_2.docx')
-    print("Создан файл: documents/test_document_2.docx")
+    doc.save('../documents/test_document_2.docx')
+    print("Создан файл: ../documents/test_document_2.docx")
 
 
 def create_test_document_3():
@@ -404,7 +404,7 @@ def create_test_document_3():
         draw.line([points[i], points[i+1]], fill='black', width=2)
     draw.text((100, 160), 'Прогресс разработки', fill='black')
     
-    img_path = 'documents/temp_img_3.png'
+    img_path = '../documents/temp_img_3.png'
     img.save(img_path)
     doc.add_picture(img_path, width=Inches(3.5))
     
@@ -417,8 +417,8 @@ def create_test_document_3():
     if os.path.exists(img_path):
         os.remove(img_path)
     
-    doc.save('documents/test_document_3.docx')
-    print("Создан файл: documents/test_document_3.docx")
+    doc.save('../documents/test_document_3.docx')
+    print("Создан файл: ../documents/test_document_3.docx")
 
 
 if __name__ == "__main__":
@@ -432,7 +432,7 @@ if __name__ == "__main__":
     print("-" * 50)
     print("Все тестовые документы созданы успешно!")
     print("\nСозданные файлы:")
-    print("  - documents/test_document_1.docx (базовый документ)")
-    print("  - documents/test_document_2.docx (версия с изменениями)")
-    print("  - documents/test_document_3.docx (совсем другой документ)")
+    print("  - ../documents/test_document_1.docx (базовый документ)")
+    print("  - ../documents/test_document_2.docx (версия с изменениями)")
+    print("  - ../documents/test_document_3.docx (совсем другой документ)")
 
