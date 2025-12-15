@@ -318,6 +318,7 @@ class HTMLExporter:
                         <th>№</th>
                         <th>Статус</th>
                         <th>Тип исправления</th>
+                        <th>Подтип изменений</th>
                         <th>Путь ({file1_name})</th>
                         <th>Страница</th>
                         <th>Текст 1</th>
@@ -348,6 +349,7 @@ class HTMLExporter:
                         <td>{idx}</td>
                         <td><span class="badge {badge_class}">{status_ru}</span></td>
                         <td>{result.get('change_type', '')}</td>
+                        <td>{result.get('change_subtype', '')}</td>
                         <td>{result.get('full_path_2') or result.get('full_path_1') or ''}</td>
                         <td>{result.get('page_2') or result.get('page_1') or ''}</td>
                         <td><div class="text-diff">{self._escape_html(result.get('text_1', ''))}</div></td>

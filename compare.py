@@ -35,6 +35,44 @@ except ImportError:
     def tqdm(iterable, *args, **kwargs):
         return iterable
 
+# Импорт colorama для цветного вывода (опционально)
+try:
+    from colorama import init, Fore, Style
+    init(autoreset=True)  # Автоматический сброс цветов после каждой строки
+    COLORAMA_AVAILABLE = True
+except ImportError:
+    COLORAMA_AVAILABLE = False
+    # Заглушки для цветов
+    class Fore:
+        GREEN = ''
+        YELLOW = ''
+        BLUE = ''
+        CYAN = ''
+        MAGENTA = ''
+        RED = ''
+        RESET = ''
+    class Style:
+        BRIGHT = ''
+        RESET_ALL = ''
+
+# Импорт colorama для цветного вывода (опционально)
+try:
+    from colorama import init, Fore, Style
+    init(autoreset=True)  # Автоматический сброс цвета после каждого print
+    COLORAMA_AVAILABLE = True
+except ImportError:
+    COLORAMA_AVAILABLE = False
+    # Заглушки для случая, когда colorama не установлен
+    class Fore:
+        BLUE = ''
+        CYAN = ''
+        GREEN = ''
+        YELLOW = ''
+        MAGENTA = ''
+        RESET = ''
+    class Style:
+        RESET_ALL = ''
+
 
 class Compare:
     """
@@ -254,7 +292,18 @@ class Compare:
         
         # Сравнение каждого абзаца из первого документа
         if TQDM_AVAILABLE:
-            paragraphs_iter = tqdm(enumerate(paragraphs1), total=len(paragraphs1), desc="Сравнение абзацев", unit="абзац")
+            if COLORAMA_AVAILABLE:
+                color_desc = f"{Fore.BLUE}{Style.BRIGHT}Сравнение абзацев{Style.RESET_ALL}"
+            else:
+                color_desc = "Сравнение абзацев"
+            paragraphs_iter = tqdm(
+                enumerate(paragraphs1), 
+                total=len(paragraphs1), 
+                desc=color_desc, 
+                unit="абзац",
+                ncols=100,
+                bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]'
+            )
         else:
             paragraphs_iter = enumerate(paragraphs1)
         
@@ -279,6 +328,7 @@ class Compare:
                 "differences": [],
                 "change_description": "",
                 "change_type": "",  # Тип исправления
+                "change_subtype": "",  # Подтип исправления
                 "llm_response": ""  # Ответ от LLM
             }
             
@@ -301,16 +351,21 @@ class Compare:
                 if similarity >= config.comparison.similarity_threshold_identical:
                     result["status"] = "identical"
                     result["change_type"] = "Без изменений"
+                    result["change_subtype"] = ""
                 elif similarity >= config.comparison.similarity_threshold_medium:
                     result["status"] = "modified"
                     result["differences"] = self._get_differences(para1["text"], para2["text"])
                     result["change_description"] = self._build_change_description(result)
-                    result["change_type"] = self._determine_change_type(para1["text"], para2["text"])
+                    full_path = result.get("full_path_2") or result.get("full_path_1") or ""
+                    result["change_type"] = self._determine_change_type(para1["text"], para2["text"], full_path)
+                    result["change_subtype"] = self._determine_change_subtype(para1["text"], para2["text"], result["change_type"], full_path)
                 else:
                     result["status"] = "modified"
                     result["differences"] = self._get_differences(para1["text"], para2["text"])
                     result["change_description"] = self._build_change_description(result)
-                    result["change_type"] = self._determine_change_type(para1["text"], para2["text"])
+                    full_path = result.get("full_path_2") or result.get("full_path_1") or ""
+                    result["change_type"] = self._determine_change_type(para1["text"], para2["text"], full_path)
+                    result["change_subtype"] = self._determine_change_subtype(para1["text"], para2["text"], result["change_type"], full_path)
             else:
                 # Поиск наиболее похожего абзаца по содержимому (игнорируя стили)
                 # Используем нормализованный текст для сравнения
@@ -332,11 +387,14 @@ class Compare:
                     result["status"] = "modified"
                     result["differences"] = self._get_differences(para1["text"], para2["text"])
                     result["change_description"] = self._build_change_description(result)
-                    result["change_type"] = self._determine_change_type(para1["text"], para2["text"])
+                    full_path = result.get("full_path_2") or result.get("full_path_1") or ""
+                    result["change_type"] = self._determine_change_type(para1["text"], para2["text"], full_path)
+                    result["change_subtype"] = self._determine_change_subtype(para1["text"], para2["text"], result["change_type"], full_path)
                     matched_indices_2.add(best_match_idx)
                 else:
                     result["change_description"] = self._build_change_description(result)
                     result["change_type"] = "Удален"
+                    result["change_subtype"] = "Удаление абзаца"
             
             self.comparison_results.append(result)
         
@@ -366,6 +424,7 @@ class Compare:
                 }
                 result["change_description"] = self._build_change_description(result)
                 result["change_type"] = "Добавлен"
+                result["change_subtype"] = "Добавление абзаца"
                 self.comparison_results.append(result)
     
     def _calculate_similarity(self, text1: str, text2: str) -> float:
@@ -930,13 +989,14 @@ class Compare:
         
         return ". ".join(description_parts) if description_parts else ""
     
-    def _determine_change_type(self, text1: str, text2: str) -> str:
+    def _determine_change_type(self, text1: str, text2: str, full_path: str = "") -> str:
         """
         Определение типа исправления.
         
         Args:
             text1: Первый текст
             text2: Второй текст
+            full_path: Полный путь к элементу (для определения контекста)
             
         Returns:
             Тип исправления
@@ -946,6 +1006,10 @@ class Compare:
         
         if norm1 == norm2:
             return "Изменение форматирования"
+        
+        # Проверка на общие правки (версия документа, орфография, пунктуация, количество листов)
+        if self._is_general_correction(text1, text2, full_path):
+            return "Общие правки"
         
         # Проверка на грамматические изменения
         words1 = set(norm1.lower().split())
@@ -968,6 +1032,193 @@ class Compare:
             return "Значительное удаление"
         else:
             return "Изменение содержания"
+    
+    def _is_general_correction(self, text1: str, text2: str, full_path: str = "") -> bool:
+        """
+        Проверка, является ли изменение общими правками:
+        - Исправление версии документа
+        - Исправление орфографических ошибок
+        - Исправление пунктуационных ошибок
+        - Актуализация количества листов
+        
+        Args:
+            text1: Первый текст
+            text2: Второй текст
+            full_path: Полный путь к элементу
+            
+        Returns:
+            True, если это общие правки
+        """
+        norm1 = self._normalize_text(text1).lower()
+        norm2 = self._normalize_text(text2).lower()
+        
+        # Паттерны для версии документа
+        version_patterns = [
+            r'верси[яиюе]\s*:?\s*(\d+\.?\d*\.?\d*)',
+            r'version\s*:?\s*(\d+\.?\d*\.?\d*)',
+            r'v\.?\s*(\d+\.?\d*\.?\d*)',
+            r'ревизи[яиюе]\s*:?\s*(\d+\.?\d*\.?\d*)',
+            r'revision\s*:?\s*(\d+\.?\d*\.?\d*)',
+            r'ред\.?\s*(\d+\.?\d*\.?\d*)'
+        ]
+        
+        # Проверка на изменение версии
+        for pattern in version_patterns:
+            match1 = re.search(pattern, text1, re.IGNORECASE)
+            match2 = re.search(pattern, text2, re.IGNORECASE)
+            if match1 and match2 and match1.group(1) != match2.group(1):
+                return True
+        
+        # Паттерны для количества листов/страниц
+        page_patterns = [
+            r'лист[ов]?\s*:?\s*(\d+)',
+            r'страниц[аы]?\s*:?\s*(\d+)',
+            r'pages?\s*:?\s*(\d+)',
+            r'всего\s+лист[ов]?\s*:?\s*(\d+)',
+            r'количество\s+лист[ов]?\s*:?\s*(\d+)'
+        ]
+        
+        # Проверка на изменение количества листов
+        for pattern in page_patterns:
+            match1 = re.search(pattern, text1, re.IGNORECASE)
+            match2 = re.search(pattern, text2, re.IGNORECASE)
+            if match1 and match2 and match1.group(1) != match2.group(1):
+                return True
+        
+        # Проверка на орфографические и пунктуационные исправления
+        # Если тексты очень похожи, но отличаются только небольшими изменениями
+        # (например, запятые, точки, исправление опечаток)
+        similarity = self._calculate_similarity(text1, text2)
+        
+        # Если схожесть высокая (>0.9), но есть различия - возможно это правки
+        if similarity > 0.9:
+            # Подсчет различий в символах (исключая пробелы)
+            chars1 = re.sub(r'\s+', '', norm1)
+            chars2 = re.sub(r'\s+', '', norm2)
+            
+            # Если разница в символах небольшая (<10%), возможно это правки
+            if len(chars1) > 0 and len(chars2) > 0:
+                char_diff = abs(len(chars1) - len(chars2)) / max(len(chars1), len(chars2))
+                if char_diff < 0.1:  # Разница менее 10%
+                    # Проверяем, что основные слова совпадают
+                    words1_set = set(re.findall(r'\b\w+\b', norm1))
+                    words2_set = set(re.findall(r'\b\w+\b', norm2))
+                    word_overlap = len(words1_set & words2_set) / max(len(words1_set), len(words2_set), 1)
+                    if word_overlap > 0.95:  # 95% слов совпадают
+                        return True
+        
+        return False
+    
+    def _determine_change_subtype(self, text1: str, text2: str, change_type: str, full_path: str = "") -> str:
+        """
+        Определение подтипа изменения.
+        
+        Args:
+            text1: Первый текст
+            text2: Второй текст
+            change_type: Тип изменения
+            full_path: Полный путь к элементу
+            
+        Returns:
+            Подтип изменения
+        """
+        if change_type == "Общие правки":
+            # Определение конкретного подтипа общих правок
+            norm1 = self._normalize_text(text1).lower()
+            norm2 = self._normalize_text(text2).lower()
+            
+            # Проверка на версию документа
+            version_patterns = [
+                r'верси[яиюе]\s*:?\s*(\d+\.?\d*\.?\d*)',
+                r'version\s*:?\s*(\d+\.?\d*\.?\d*)',
+                r'v\.?\s*(\d+\.?\d*\.?\d*)',
+                r'ревизи[яиюе]\s*:?\s*(\d+\.?\d*\.?\d*)',
+                r'revision\s*:?\s*(\d+\.?\d*\.?\d*)',
+                r'ред\.?\s*(\d+\.?\d*\.?\d*)'
+            ]
+            
+            for pattern in version_patterns:
+                match1 = re.search(pattern, text1, re.IGNORECASE)
+                match2 = re.search(pattern, text2, re.IGNORECASE)
+                if match1 and match2 and match1.group(1) != match2.group(1):
+                    return f"Исправление версии документа ({match1.group(1)} → {match2.group(1)})"
+            
+            # Проверка на количество листов
+            page_patterns = [
+                r'лист[ов]?\s*:?\s*(\d+)',
+                r'страниц[аы]?\s*:?\s*(\d+)',
+                r'pages?\s*:?\s*(\d+)',
+                r'всего\s+лист[ов]?\s*:?\s*(\d+)',
+                r'количество\s+лист[ов]?\s*:?\s*(\d+)'
+            ]
+            
+            for pattern in page_patterns:
+                match1 = re.search(pattern, text1, re.IGNORECASE)
+                match2 = re.search(pattern, text2, re.IGNORECASE)
+                if match1 and match2 and match1.group(1) != match2.group(1):
+                    return f"Актуализация количества листов ({match1.group(1)} → {match2.group(1)})"
+            
+            # Проверка на орфографические и пунктуационные ошибки
+            # Если тексты очень похожи, но есть небольшие различия
+            similarity = self._calculate_similarity(text1, text2)
+            if similarity > 0.9:
+                # Подсчет различий в пунктуации
+                punct1 = re.findall(r'[.,;:!?—–-]', text1)
+                punct2 = re.findall(r'[.,;:!?—–-]', text2)
+                if len(punct1) != len(punct2):
+                    return "Исправление пунктуации"
+                
+                # Проверка на орфографические ошибки (изменение отдельных букв в словах)
+                words1 = re.findall(r'\b\w+\b', norm1)
+                words2 = re.findall(r'\b\w+\b', norm2)
+                
+                if len(words1) == len(words2):
+                    # Проверяем, есть ли слова с небольшими различиями
+                    for w1, w2 in zip(words1, words2):
+                        if w1 != w2 and len(w1) == len(w2):
+                            # Подсчет различий в символах
+                            diff_count = sum(c1 != c2 for c1, c2 in zip(w1, w2))
+                            if diff_count <= 2:  # Не более 2 символов отличаются
+                                return "Исправление орфографических ошибок"
+                
+                return "Исправление пунктуации"
+            
+            return "Общие правки"
+        
+        elif change_type == "Изменение форматирования":
+            return "Изменение стиля"
+        
+        elif change_type == "Добавление текста":
+            # Определяем, что добавлено
+            words1 = set(self._normalize_text(text1).lower().split())
+            words2 = set(self._normalize_text(text2).lower().split())
+            added = words2 - words1
+            if len(added) <= 3:
+                return "Добавление слов"
+            elif len(added) <= 10:
+                return "Добавление предложения"
+            else:
+                return "Добавление абзаца"
+        
+        elif change_type == "Удаление текста":
+            words1 = set(self._normalize_text(text1).lower().split())
+            words2 = set(self._normalize_text(text2).lower().split())
+            removed = words1 - words2
+            if len(removed) <= 3:
+                return "Удаление слов"
+            elif len(removed) <= 10:
+                return "Удаление предложения"
+            else:
+                return "Удаление абзаца"
+        
+        elif change_type == "Изменение содержания":
+            return "Изменение смысла"
+        
+        elif change_type == "Изменение порядка слов":
+            return "Реорганизация текста"
+        
+        else:
+            return ""
     
     def _get_text_changes(self, text1: str, text2: str) -> str:
         """
@@ -1052,15 +1303,23 @@ class Compare:
         
         # Использование прогресс-бара
         if TQDM_AVAILABLE:
+            if COLORAMA_AVAILABLE:
+                color_desc = f"{Fore.MAGENTA}{Style.BRIGHT}LLM анализ{Style.RESET_ALL}"
+            else:
+                color_desc = "LLM анализ"
             progress_bar = tqdm(
                 changed_results,
-                desc="LLM анализ",
+                desc=color_desc,
                 unit="элемент",
-                ncols=80
+                ncols=100,
+                bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]'
             )
         else:
             progress_bar = changed_results
-            print(f"\nАнализ {total_changed} измененных элементов через LLM...")
+            if COLORAMA_AVAILABLE:
+                print(f"\n{Fore.MAGENTA}{Style.BRIGHT}Анализ {total_changed} измененных элементов через LLM...{Style.RESET_ALL}")
+            else:
+                print(f"\nАнализ {total_changed} измененных элементов через LLM...")
         
         # Анализ каждого измененного элемента
         for result in progress_bar:

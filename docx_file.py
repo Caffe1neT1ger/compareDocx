@@ -16,6 +16,31 @@ from logger_config import logger
 from exceptions import DocumentLoadError, DocumentParseError, ValidationError
 from validators import validate_file_size, validate_document_structure
 
+# Импорт tqdm и colorama для прогресс-баров (опционально)
+try:
+    from tqdm import tqdm
+    TQDM_AVAILABLE = True
+except ImportError:
+    TQDM_AVAILABLE = False
+    def tqdm(iterable, *args, **kwargs):
+        return iterable
+
+try:
+    from colorama import init, Fore, Style
+    init(autoreset=True)
+    COLORAMA_AVAILABLE = True
+except ImportError:
+    COLORAMA_AVAILABLE = False
+    class Fore:
+        BLUE = ''
+        CYAN = ''
+        GREEN = ''
+        YELLOW = ''
+        MAGENTA = ''
+        RESET = ''
+    class Style:
+        RESET_ALL = ''
+
 
 class DocxFile:
     """Класс для работы с DOCX файлами."""
@@ -96,8 +121,18 @@ class DocxFile:
         # Оптимизация: вычисляем накопленную длину символов один раз
         total_chars = 0
         
-        # Парсинг абзацев
-        for para in self.document.paragraphs:
+        # Парсинг абзацев с прогресс-баром
+        paragraphs_list = list(self.document.paragraphs)
+        paragraphs_iter = paragraphs_list
+        if TQDM_AVAILABLE and len(paragraphs_list) > 5:  # Показываем прогресс только для больших документов
+            if COLORAMA_AVAILABLE:
+                color_desc = f"{Fore.CYAN}{Style.BRIGHT}Парсинг абзацев{Style.RESET_ALL}"
+            else:
+                color_desc = "Парсинг абзацев"
+            paragraphs_iter = tqdm(paragraphs_list, desc=color_desc, unit="абзац", leave=False, ncols=100,
+                                   bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]')
+        
+        for para in paragraphs_iter:
             text = para.text.strip()
             
             # Обновление иерархии при встрече заголовка
@@ -441,7 +476,17 @@ class DocxFile:
     
     def _parse_tables(self):
         """Парсинг таблиц из документа."""
-        for table_idx, table in enumerate(self.document.tables):
+        tables_list = list(enumerate(self.document.tables))
+        tables_iter = tables_list
+        if TQDM_AVAILABLE and len(tables_list) > 0:
+            if COLORAMA_AVAILABLE:
+                color_desc = f"{Fore.YELLOW}{Style.BRIGHT}Парсинг таблиц{Style.RESET_ALL}"
+            else:
+                color_desc = "Парсинг таблиц"
+            tables_iter = tqdm(tables_list, total=len(tables_list), desc=color_desc, unit="таблица", leave=False, ncols=100,
+                              bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]')
+        
+        for table_idx, table in tables_iter:
             table_data = {
                 "index": table_idx + 1,
                 "rows": [],

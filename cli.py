@@ -13,6 +13,7 @@ import argparse
 import sys
 import os
 from pathlib import Path
+from datetime import datetime
 from compare import Compare
 from excel_export import ExcelExporter
 from json_export import JSONExporter
@@ -33,13 +34,16 @@ def create_parser():
         epilog="""
 Примеры использования:
 
-  # Базовое сравнение с экспортом в Excel:
-  python cli.py file1.docx file2.docx -o result.xlsx
+  # Базовое сравнение с экспортом в Excel (по умолчанию):
+  python cli.py file1.docx file2.docx
 
-  # Экспорт в JSON:
-  python cli.py file1.docx file2.docx --format json -o result.json
+  # Экспорт в JSON используя флаг:
+  python cli.py file1.docx file2.docx --json
 
-  # Экспорт в несколько форматов:
+  # Экспорт в несколько форматов используя флаги:
+  python cli.py file1.docx file2.docx --xlsx --json --html
+
+  # Или используя опцию --format:
   python cli.py file1.docx file2.docx --format excel json html
 
   # Фильтрация только изменений:
@@ -78,8 +82,33 @@ def create_parser():
         '--format',
         nargs='+',
         choices=['excel', 'json', 'csv', 'html'],
-        default=['excel'],
-        help='Формат(ы) экспорта результатов (можно указать несколько)'
+        default=None,
+        help='Формат(ы) экспорта результатов (можно указать несколько). Альтернатива: использовать флаги --xlsx, --csv, --json, --html'
+    )
+    
+    # Отдельные флаги для каждого формата
+    parser.add_argument(
+        '--xlsx',
+        action='store_true',
+        help='Экспортировать результаты в Excel формат (.xlsx)'
+    )
+    
+    parser.add_argument(
+        '--csv',
+        action='store_true',
+        help='Экспортировать результаты в CSV формат'
+    )
+    
+    parser.add_argument(
+        '--json',
+        action='store_true',
+        help='Экспортировать результаты в JSON формат'
+    )
+    
+    parser.add_argument(
+        '--html',
+        action='store_true',
+        help='Экспортировать результаты в HTML формат'
     )
     
     parser.add_argument(
@@ -201,8 +230,8 @@ def main():
             filters["change_types"] = args.filter_change_types
         
         if filters:
-            from json_export import JSONExporter
-            filtered_results = JSONExporter("", pretty=False)._apply_filters(results, filters)
+            # Используем метод фильтрации напрямую
+            filtered_results = JSONExporter._apply_filters(None, results, filters)
             logger.info(f"Применены фильтры: {len(filtered_results)} из {len(results)} результатов")
         else:
             filtered_results = results
@@ -233,18 +262,58 @@ def main():
             if llm_analyzed > 0:
                 print(f"Проанализировано через LLM: {llm_analyzed} элементов")
         
+        # Определение форматов экспорта
+        # Приоритет: флаги (--xlsx, --csv, и т.д.) > опция --format > по умолчанию excel
+        export_formats = []
+        
+        if args.xlsx or args.csv or args.json or args.html:
+            # Используем флаги
+            if args.xlsx:
+                export_formats.append('excel')
+            if args.csv:
+                export_formats.append('csv')
+            if args.json:
+                export_formats.append('json')
+            if args.html:
+                export_formats.append('html')
+        elif args.format:
+            # Используем опцию --format
+            export_formats = args.format
+        else:
+            # По умолчанию Excel
+            export_formats = ['excel']
+        
+        # Создание папки для результатов с временной меткой
+        # Более читаемый формат даты и времени: YYYY-MM-DD_HH-MM-SS
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        file1_base = Path(file1_path).stem[:20]  # Первые 20 символов имени файла
+        file2_base = Path(file2_path).stem[:20]
+        comparison_dir_name = f"comparison_{file1_base}_vs_{file2_base}_{timestamp}"
+        
+        # Определение базовой директории для результатов
+        if args.output_dir:
+            base_output_dir = Path(args.output_dir)
+        else:
+            base_output_dir = Path("results")
+        
+        # Создание папки для этого запуска
+        comparison_dir = base_output_dir / comparison_dir_name
+        comparison_dir.mkdir(parents=True, exist_ok=True)
+        
+        logger.info(f"Результаты будут сохранены в папку: {comparison_dir}")
+        print(f"\nПапка результатов: {comparison_dir}")
+        
         # Экспорт в выбранные форматы
         file1_name = os.path.basename(file1_path)
         file2_name = os.path.basename(file2_path)
         
-        output_dir = args.output_dir or Path(args.output).parent
-        output_base = Path(args.output).stem
+        output_base = f"{file1_base}_vs_{file2_base}"
         
-        for fmt in args.format:
+        for fmt in export_formats:
             print(f"\nЭкспорт в {fmt.upper()}...")
             
             if fmt == 'excel':
-                output_path = args.output if 'excel' in args.format and len(args.format) == 1 else str(Path(output_dir) / f"{output_base}.xlsx")
+                output_path = str(comparison_dir / f"{output_base}.xlsx")
                 exporter = ExcelExporter(output_path)
                 exporter.export_comparison(
                     filtered_results if filters else results,
@@ -254,10 +323,10 @@ def main():
                     table_changes,
                     image_changes
                 )
-                print(f"Результаты сохранены: {os.path.abspath(output_path)}")
+                print(f"  [OK] Excel: {output_path}")
             
             elif fmt == 'json':
-                output_path = args.output if fmt == 'json' and len(args.format) == 1 else str(Path(output_dir) / f"{output_base}.json")
+                output_path = str(comparison_dir / f"{output_base}.json")
                 pretty = args.json_pretty and not args.json_compact
                 exporter = JSONExporter(output_path, pretty=pretty)
                 exporter.export_comparison(
@@ -269,10 +338,10 @@ def main():
                     image_changes,
                     filters if filters else None
                 )
-                print(f"Результаты сохранены: {os.path.abspath(output_path)}")
+                print(f"  [OK] JSON: {output_path}")
             
             elif fmt == 'csv':
-                exporter = CSVExporter(str(output_dir))
+                exporter = CSVExporter(str(comparison_dir))
                 exporter.export_comparison(
                     filtered_results if filters else results,
                     statistics,
@@ -281,10 +350,10 @@ def main():
                     table_changes,
                     image_changes
                 )
-                print(f"Результаты сохранены в директории: {os.path.abspath(output_dir)}")
+                print(f"  [OK] CSV: файлы сохранены в {comparison_dir}")
             
             elif fmt == 'html':
-                output_path = args.output if fmt == 'html' and len(args.format) == 1 else str(Path(output_dir) / f"{output_base}.html")
+                output_path = str(comparison_dir / f"{output_base}.html")
                 exporter = HTMLExporter(output_path)
                 exporter.export_comparison(
                     filtered_results if filters else results,
@@ -294,11 +363,13 @@ def main():
                     table_changes,
                     image_changes
                 )
-                print(f"Результаты сохранены: {os.path.abspath(output_path)}")
+                print(f"  [OK] HTML: {output_path}")
         
         print(f"\n{'='*60}")
         print("Сравнение завершено успешно!")
         print(f"{'='*60}")
+        print(f"\nВсе результаты сохранены в папку:")
+        print(f"   {os.path.abspath(comparison_dir)}")
         
     except Exception as e:
         logger.error(f"Ошибка при выполнении сравнения: {e}")

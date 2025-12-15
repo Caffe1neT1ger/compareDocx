@@ -14,6 +14,7 @@
 import sys
 import os
 from pathlib import Path
+from datetime import datetime
 from compare import Compare
 from excel_export import ExcelExporter
 from llm_adapter import LLMAdapter
@@ -133,9 +134,29 @@ def main():
             if llm_analyzed > 0:
                 print(f"Проанализировано через LLM: {llm_analyzed} элементов")
         
-        # Шаг 5: Экспорт в Excel
+        # Шаг 5: Создание папки для результатов с временной меткой
+        # Более читаемый формат даты и времени: YYYY-MM-DD_HH-MM-SS
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        file1_base = Path(file1_path).stem[:20]
+        file2_base = Path(file2_path).stem[:20]
+        comparison_dir_name = f"comparison_{file1_base}_vs_{file2_base}_{timestamp}"
+        
+        # Определение базовой директории для результатов
+        base_output_dir = Path("results")
+        comparison_dir = base_output_dir / comparison_dir_name
+        comparison_dir.mkdir(parents=True, exist_ok=True)
+        
+        logger.info(f"Результаты будут сохранены в папку: {comparison_dir}")
+        print(f"\nПапка результатов: {comparison_dir}")
+        
+        # Шаг 6: Экспорт в Excel
+        output_file_name = Path(output_path).name if Path(output_path).suffix else "comparison_result.xlsx"
+        if not output_file_name.endswith('.xlsx'):
+            output_file_name = output_file_name.rsplit('.', 1)[0] + '.xlsx'
+        
+        final_output_path = comparison_dir / output_file_name
         print(f"\nЭкспорт результатов в Excel...")
-        exporter = ExcelExporter(output_path)
+        exporter = ExcelExporter(str(final_output_path))
         exporter.export_comparison(
             results,
             statistics,
@@ -145,8 +166,10 @@ def main():
             image_changes
         )
         
-        # Шаг 6: Завершение
-        print(f"\nРезультаты сохранены в файл: {os.path.abspath(output_path)}")
+        # Шаг 7: Завершение
+        print(f"\n[OK] Результаты сохранены: {os.path.abspath(final_output_path)}")
+        print(f"\nВсе результаты сохранены в папку:")
+        print(f"   {os.path.abspath(comparison_dir)}")
         print("=" * 60)
         print("Сравнение завершено успешно!")
         

@@ -66,7 +66,7 @@ class JSONExporter:
         """
         try:
             # Применение фильтров
-            filtered_results = self._apply_filters(comparison_results, filters)
+            filtered_results = JSONExporter._apply_filters(None, comparison_results, filters)
             
             # Формирование структуры данных
             export_data = {
@@ -100,7 +100,8 @@ class JSONExporter:
             logger.error(f"Ошибка при экспорте в JSON: {e}")
             raise ExportError(str(self.output_path), str(e))
     
-    def _apply_filters(self, results: List[Dict], filters: Optional[Dict]) -> List[Dict]:
+    @staticmethod
+    def _apply_filters(exporter_instance, results: List[Dict], filters: Optional[Dict]) -> List[Dict]:
         """
         Применение фильтров к результатам.
         

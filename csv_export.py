@@ -93,7 +93,7 @@ class CSVExporter:
                                    file1_name: str, file2_name: str):
         """Экспорт результатов сравнения абзацев."""
         headers = [
-            "№", "Статус", "Тип исправления",
+            "№", "Статус", "Тип исправления", "Подтип изменений",
             f"Полный путь ({file1_name})", f"Страница ({file1_name})",
             f"Абзац № ({file1_name})", f"Текст ({file1_name})",
             f"Полный путь ({file2_name})", f"Страница ({file2_name})",
@@ -110,6 +110,7 @@ class CSVExporter:
                     result.get("index_1") or "",
                     result.get("status", ""),
                     result.get("change_type", ""),
+                    result.get("change_subtype", ""),
                     result.get("full_path_1") or "",
                     result.get("page_1") or "",
                     result.get("index_1") or "",
