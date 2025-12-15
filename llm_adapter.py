@@ -409,7 +409,7 @@ class LLMAdapter:
             "enabled": str(self.enabled)
         }
     
-    def generate_summary(self, llm_responses: list[str]) -> str:
+    def generate_summary(self, llm_responses: list) -> str:
         """
         Генерация краткого смыслового описания всех изменений на основе LLM ответов.
         
@@ -417,7 +417,8 @@ class LLMAdapter:
         краткого описания в формате нумерованного списка.
         
         Args:
-            llm_responses: Список всех LLM ответов об изменениях (исключая "Без изменений")
+            llm_responses: Список словарей с ключами "response" (текст ответа) и "page" (номер страницы),
+                          или список строк (для обратной совместимости)
         
         Returns:
             Краткое смысловое описание изменений в формате нумерованного списка
@@ -425,15 +426,28 @@ class LLMAdapter:
         if not self.enabled or not self.client:
             return "Общие правки."
         
-        # Фильтруем пустые ответы и "Без изменений"
-        filtered_responses = [
-            resp for resp in llm_responses 
-            if resp and resp.strip() and resp.strip() != "Без изменений"
-        ]
+        # Обрабатываем входные данные: могут быть словари или строки
+        processed_responses = []
+        for resp in llm_responses:
+            if isinstance(resp, dict):
+                # Новый формат: словарь с "response" и "page"
+                response_text = resp.get("response", "")
+                page = resp.get("page")
+            else:
+                # Старый формат: просто строка (для обратной совместимости)
+                response_text = resp
+                page = None
+            
+            # Фильтруем пустые ответы и "Без изменений"
+            if response_text and response_text.strip() and response_text.strip() != "Без изменений":
+                processed_responses.append({
+                    "response": response_text,
+                    "page": page
+                })
         
-        logger.debug(f"Получено {len(llm_responses)} LLM ответов, после фильтрации: {len(filtered_responses)}")
+        logger.debug(f"Получено {len(llm_responses)} LLM ответов, после фильтрации: {len(processed_responses)}")
         
-        if not filtered_responses:
+        if not processed_responses:
             logger.warning("Нет LLM ответов для генерации краткого описания")
             return "Общие правки."
         
@@ -447,7 +461,7 @@ class LLMAdapter:
                 # Дефолтный промпт для краткого описания
                 summary_system_prompt = """Вы - профессиональный аналитик документов. 
 Проанализируйте список изменений и составьте краткое смысловое описание в формате нумерованного списка.
-Группируйте похожие изменения вместе. Указывайте конкретные места изменений (разделы, пункты, таблицы).
+Группируйте похожие изменения вместе. Указывайте конкретные места изменений (разделы, пункты, таблицы) с номерами страниц.
 Если есть общие правки, укажите их отдельным пунктом."""
         except Exception as e:
             logger.warning(f"Ошибка при загрузке промпта краткого описания: {e}")
@@ -455,24 +469,29 @@ class LLMAdapter:
         
         # Ограничиваем количество ответов для анализа (первые 15 наиболее важных)
         # Сортируем по длине ответа (более длинные ответы обычно содержат больше информации)
-        sorted_responses = sorted(filtered_responses, key=len, reverse=True)[:15]
+        sorted_responses = sorted(processed_responses, key=lambda x: len(x["response"]), reverse=True)[:15]
         
-        # Убираем пути из ответов для более компактного представления и сокращаем длину
+        # Упрощаем ответы: убираем пути, но сохраняем информацию о страницах
         simplified_responses = []
-        for resp in sorted_responses:
+        for item in sorted_responses:
+            resp = item["response"]
+            page = item.get("page")
+            
             # Убираем путь из начала ответа, оставляем только суть изменений
             if "\n\n" in resp:
                 _, response_text = resp.split("\n\n", 1)
-                # Сокращаем длину каждого ответа до 200 символов
-                if len(response_text) > 200:
-                    response_text = response_text[:200] + "..."
-                simplified_responses.append(response_text.strip())
             else:
-                # Сокращаем длину каждого ответа до 200 символов
-                resp_short = resp.strip()
-                if len(resp_short) > 200:
-                    resp_short = resp_short[:200] + "..."
-                simplified_responses.append(resp_short)
+                response_text = resp
+            
+            # Сокращаем длину каждого ответа до 200 символов
+            if len(response_text) > 200:
+                response_text = response_text[:200] + "..."
+            
+            # Формируем строку с информацией о странице
+            if page:
+                simplified_responses.append(f"{response_text.strip()} (страница {page})")
+            else:
+                simplified_responses.append(response_text.strip())
         
         # Формируем список изменений для анализа
         changes_list = "\n".join([f"{i+1}. {resp}" for i, resp in enumerate(simplified_responses)])
@@ -483,7 +502,7 @@ class LLMAdapter:
 
 {changes_list}
 
-Составьте краткое описание, группируя похожие изменения вместе. Указывайте конкретные места изменений (разделы, пункты, таблицы) с их номерами. Формат ответа - нумерованный список."""
+Составьте краткое описание, группируя похожие изменения вместе. Указывайте конкретные места изменений (разделы, пункты, таблицы) с их номерами. ОБЯЗАТЕЛЬНО включайте номера страниц для каждого изменения (если они указаны в скобках). Формат ответа - нумерованный список."""
         
         # Retry логика
         max_retries = config.llm.max_retries

@@ -11,8 +11,9 @@
 1. "Сравнение" - полное сравнение всех абзацев
 2. "Только изменения" - фильтрованный список только измененных элементов
 3. "Статистика" - общая статистика сравнения
-4. "Таблицы" - изменения в таблицах
-5. "Изображения" - изменения в изображениях
+4. "Краткое описание" - краткое смысловое описание всех изменений (генерируется через LLM, если включен)
+5. "Таблицы" - изменения в таблицах
+6. "Изображения" - изменения в изображениях
 """
 
 from openpyxl import Workbook
@@ -80,7 +81,8 @@ class ExcelExporter:
         self._create_statistics_sheet(ws_stats, statistics, file1_name, file2_name)
         
         # Создание листа с кратким описанием изменений
-        has_summary = summary_changes and summary_changes.strip() and summary_changes.strip() != "Общие правки."
+        # Создаем лист всегда, если есть summary_changes (включая "Без изменений")
+        has_summary = summary_changes and summary_changes.strip()
         if has_summary:
             ws_summary = self.workbook.create_sheet("Краткое описание", 3)
             self._create_summary_sheet(ws_summary, summary_changes)

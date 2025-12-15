@@ -1393,12 +1393,20 @@ class Compare:
         Returns:
             Краткое смысловое описание всех изменений в формате нумерованного списка
         """
+        # Проверяем, есть ли вообще изменения
+        modified_count = sum(1 for r in self.comparison_results if r["status"] == "modified")
+        added_count = sum(1 for r in self.comparison_results if r["status"] == "added")
+        deleted_count = sum(1 for r in self.comparison_results if r["status"] == "deleted")
+        tables_changed = len([t for t in self.table_changes if t["status"] != "identical"])
+        images_changed = len([i for i in self.image_changes if i["status"] != "identical"])
+        
+        # Если нет изменений вообще, возвращаем "Без изменений"
+        if modified_count == 0 and added_count == 0 and deleted_count == 0 and tables_changed == 0 and images_changed == 0:
+            return "Без изменений"
+        
         if not self.llm_adapter or not self.llm_adapter.is_enabled():
             # Если LLM недоступен, возвращаем простое описание
             summary_parts = []
-            modified_count = sum(1 for r in self.comparison_results if r["status"] == "modified")
-            added_count = sum(1 for r in self.comparison_results if r["status"] == "added")
-            deleted_count = sum(1 for r in self.comparison_results if r["status"] == "deleted")
             
             if modified_count > 0:
                 summary_parts.append(f"Изменено: {modified_count}")
@@ -1407,11 +1415,9 @@ class Compare:
             if deleted_count > 0:
                 summary_parts.append(f"Удалено: {deleted_count}")
             
-            tables_changed = len([t for t in self.table_changes if t["status"] != "identical"])
             if tables_changed > 0:
                 summary_parts.append(f"Таблиц изменено: {tables_changed}")
             
-            images_changed = len([i for i in self.image_changes if i["status"] != "identical"])
             if images_changed > 0:
                 summary_parts.append(f"Изображений изменено: {images_changed}")
             
@@ -1420,17 +1426,23 @@ class Compare:
             else:
                 return "Общие правки."
         
-        # Собираем все LLM ответы об изменениях
-        llm_responses = []
+        # Собираем все LLM ответы об изменениях с информацией о страницах
+        llm_responses_with_pages = []
         
         # Изменения в абзацах
         for result in self.comparison_results:
             llm_resp = result.get("llm_response", "")
             # Фильтруем пустые ответы и "Без изменений"
             if llm_resp and llm_resp.strip() and llm_resp.strip() != "Без изменений":
-                llm_responses.append(llm_resp)
+                # Извлекаем информацию о странице
+                page = result.get("page_2") or result.get("page_1")
+                # Сохраняем ответ вместе с информацией о странице
+                llm_responses_with_pages.append({
+                    "response": llm_resp,
+                    "page": page
+                })
         
-        logger.debug(f"Собрано {len(llm_responses)} LLM ответов для генерации краткого описания")
+        logger.debug(f"Собрано {len(llm_responses_with_pages)} LLM ответов для генерации краткого описания")
         
         # Изменения в таблицах
         for table_change in self.table_changes:
@@ -1438,10 +1450,17 @@ class Compare:
                 change_desc = table_change.get("change_description", "")
                 if change_desc and change_desc != "Без изменений":
                     table_name = table_change.get("table_1_name") or table_change.get("table_2_name") or ""
+                    page = table_change.get("page_2") or table_change.get("page_1")
                     if table_name:
-                        llm_responses.append(f"Таблица {table_name}: {change_desc}")
+                        llm_responses_with_pages.append({
+                            "response": f"Таблица {table_name}: {change_desc}",
+                            "page": page
+                        })
                     else:
-                        llm_responses.append(f"Таблица: {change_desc}")
+                        llm_responses_with_pages.append({
+                            "response": f"Таблица: {change_desc}",
+                            "page": page
+                        })
         
         # Изменения в изображениях
         for image_change in self.image_changes:
@@ -1449,15 +1468,22 @@ class Compare:
                 change_desc = image_change.get("change_description", "")
                 if change_desc and change_desc != "Без изменений":
                     image_name = image_change.get("image_1_name") or image_change.get("image_2_name") or ""
+                    page = image_change.get("page_2") or image_change.get("page_1")
                     if image_name:
-                        llm_responses.append(f"Изображение {image_name}: {change_desc}")
+                        llm_responses_with_pages.append({
+                            "response": f"Изображение {image_name}: {change_desc}",
+                            "page": page
+                        })
                     else:
-                        llm_responses.append(f"Изображение: {change_desc}")
+                        llm_responses_with_pages.append({
+                            "response": f"Изображение: {change_desc}",
+                            "page": page
+                        })
         
         # Генерируем краткое описание через LLM
-        if llm_responses:
-            logger.info(f"Генерация краткого описания на основе {len(llm_responses)} изменений...")
-            summary = self.llm_adapter.generate_summary(llm_responses)
+        if llm_responses_with_pages:
+            logger.info(f"Генерация краткого описания на основе {len(llm_responses_with_pages)} изменений...")
+            summary = self.llm_adapter.generate_summary(llm_responses_with_pages)
             logger.info("Краткое описание сгенерировано.")
             return summary
         else:
