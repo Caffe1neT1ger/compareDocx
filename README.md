@@ -50,15 +50,32 @@ pip install -r requirements.txt
 
 ## Использование
 
-### Командная строка
+### Новый CLI с опциями (рекомендуется)
 
 ```bash
-python main.py файл1.docx файл2.docx результат.xlsx
+# Базовое сравнение с экспортом в Excel
+python cli.py файл1.docx файл2.docx -o результат.xlsx
+
+# Экспорт в несколько форматов
+python cli.py файл1.docx файл2.docx --format excel json html
+
+# Фильтрация только изменений
+python cli.py файл1.docx файл2.docx --filter-status modified added
+
+# Отключение LLM анализа
+python cli.py файл1.docx файл2.docx --no-llm
+
+# Просмотр всех опций
+python cli.py --help
 ```
 
-### Интерактивный режим
+### Старый способ (main.py)
 
 ```bash
+# Командная строка
+python main.py файл1.docx файл2.docx результат.xlsx
+
+# Интерактивный режим
 python main.py
 ```
 
@@ -106,9 +123,10 @@ python create_test_documents.py
 python tests/create_test_documents.py
 ```
 
-## Формат результатов
+## Форматы экспорта результатов
 
-Результаты сохраняются в Excel файл с двумя листами:
+### Excel (по умолчанию)
+Результаты сохраняются в Excel файл с несколькими листами:
 
 1. **Сравнение** - Детальное сравнение каждого абзаца:
    - Статус (идентичен/изменен/добавлен/удален)
@@ -131,6 +149,24 @@ python tests/create_test_documents.py
 4. **Таблицы** - Детальные изменения в таблицах
 
 5. **Изображения** - Детальные изменения в изображениях
+
+### JSON
+Экспорт в структурированный JSON формат для программной обработки:
+```bash
+python cli.py файл1.docx файл2.docx --format json -o результат.json
+```
+
+### CSV
+Экспорт в CSV файлы (создается несколько файлов для разных типов данных):
+```bash
+python cli.py файл1.docx файл2.docx --format csv --output-dir результаты/
+```
+
+### HTML
+Интерактивный HTML отчет с фильтрацией и поиском:
+```bash
+python cli.py файл1.docx файл2.docx --format html -o отчет.html
+```
 
 ## Цветовая индикация в Excel
 

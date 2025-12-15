@@ -25,6 +25,16 @@ from config import config
 from logger_config import logger
 from exceptions import ComparisonError
 
+# Импорт tqdm для прогресс-бара (опционально)
+try:
+    from tqdm import tqdm
+    TQDM_AVAILABLE = True
+except ImportError:
+    TQDM_AVAILABLE = False
+    # Заглушка для случая, когда tqdm не установлен
+    def tqdm(iterable, *args, **kwargs):
+        return iterable
+
 
 class Compare:
     """
@@ -243,7 +253,12 @@ class Compare:
                                 break
         
         # Сравнение каждого абзаца из первого документа
-        for idx1, para1 in enumerate(paragraphs1):
+        if TQDM_AVAILABLE:
+            paragraphs_iter = tqdm(enumerate(paragraphs1), total=len(paragraphs1), desc="Сравнение абзацев", unit="абзац")
+        else:
+            paragraphs_iter = enumerate(paragraphs1)
+        
+        for idx1, para1 in paragraphs_iter:
             result = {
                 "index_1": idx1 + 1,
                 "text_1": para1["text"],
@@ -1016,11 +1031,13 @@ class Compare:
         Вызывается автоматически после основного сравнения, если LLM адаптер доступен.
         Анализирует только элементы с изменениями (modified, added, deleted),
         пропуская идентичные элементы для оптимизации.
+        
+        Использует прогресс-бар для отображения прогресса обработки.
         """
         if not self.llm_adapter or not self.llm_adapter.is_enabled():
             return
         
-        print("\nВыполнение дополнительного анализа изменений через LLM...")
+        logger.info("Начало анализа изменений через LLM")
         
         # Фильтруем только элементы с изменениями
         changed_results = [
@@ -1030,16 +1047,23 @@ class Compare:
         
         total_changed = len(changed_results)
         if total_changed == 0:
-            print("Нет изменений для анализа через LLM.")
+            logger.info("Нет изменений для анализа через LLM.")
             return
         
-        print(f"Анализ {total_changed} измененных элементов...")
+        # Использование прогресс-бара
+        if TQDM_AVAILABLE:
+            progress_bar = tqdm(
+                changed_results,
+                desc="LLM анализ",
+                unit="элемент",
+                ncols=80
+            )
+        else:
+            progress_bar = changed_results
+            print(f"\nАнализ {total_changed} измененных элементов через LLM...")
         
         # Анализ каждого измененного элемента
-        for idx, result in enumerate(changed_results, 1):
-            if idx % 10 == 0:
-                print(f"Обработано {idx}/{total_changed} элементов...")
-            
+        for result in progress_bar:
             status = result["status"]
             text1 = result.get("text_1", "") or ""
             text2 = result.get("text_2", "") or ""
@@ -1072,20 +1096,30 @@ class Compare:
                 llm_response = self.llm_adapter.analyze_changes(text1, "", context)
                 result["llm_response"] = llm_response
         
-        print(f"Анализ через LLM завершен. Обработано {total_changed} элементов.")
+        if TQDM_AVAILABLE:
+            progress_bar.close()
+        
+        logger.info(f"Анализ через LLM завершен. Обработано {total_changed} элементов.")
     
     def get_statistics(self) -> Dict:
         """
         Получить статистику сравнения.
         
         Returns:
-            Словарь со статистикой
+            Словарь со статистикой, включая статистику по типам изменений
         """
         total = len(self.comparison_results)
         identical = sum(1 for r in self.comparison_results if r["status"] == "identical")
         modified = sum(1 for r in self.comparison_results if r["status"] == "modified")
         added = sum(1 for r in self.comparison_results if r["status"] == "added")
         deleted = sum(1 for r in self.comparison_results if r["status"] == "deleted")
+        
+        # Статистика по типам изменений
+        change_types = {}
+        for result in self.comparison_results:
+            change_type = result.get("change_type", "Не определен")
+            if change_type:
+                change_types[change_type] = change_types.get(change_type, 0) + 1
         
         # Статистика по LLM анализу
         llm_analyzed = sum(1 for r in self.comparison_results if r.get("llm_response"))
@@ -1116,6 +1150,7 @@ class Compare:
             "images_total_1": len(images1),
             "images_total_2": len(images2),
             "images_changed": images_changed,
-            "llm_analyzed": llm_analyzed
+            "llm_analyzed": llm_analyzed,
+            "change_types": change_types  # Статистика по типам изменений
         }
 

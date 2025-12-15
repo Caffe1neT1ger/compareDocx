@@ -271,6 +271,23 @@ class ExcelExporter:
             worksheet.cell(row=row, column=1, value=stat_name)
             worksheet.cell(row=row, column=2, value=stat_value)
         
+        # Статистика по типам изменений
+        change_types = statistics.get("change_types", {})
+        if change_types:
+            row += 1
+            worksheet.cell(row=row, column=1, value="Типы изменений").font = Font(bold=True, size=12)
+            row += 1
+            worksheet.cell(row=row, column=1, value="Тип").font = Font(bold=True)
+            worksheet.cell(row=row, column=2, value="Количество").font = Font(bold=True)
+            row += 1
+            
+            # Сортируем по количеству (по убыванию)
+            sorted_types = sorted(change_types.items(), key=lambda x: x[1], reverse=True)
+            for change_type, count in sorted_types:
+                worksheet.cell(row=row, column=1, value=change_type)
+                worksheet.cell(row=row, column=2, value=count)
+                row += 1
+        
         # Настройка ширины столбцов
         worksheet.column_dimensions['A'].width = 20
         worksheet.column_dimensions['B'].width = 30

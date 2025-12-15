@@ -17,6 +17,7 @@
 
 from typing import Optional, Dict
 import os
+import time
 from pathlib import Path
 
 # Попытка загрузить переменные окружения из .env файла
@@ -26,6 +27,10 @@ try:
 except ImportError:
     # Если python-dotenv не установлен, работаем только с переменными окружения системы
     pass
+
+from config import config
+from logger_config import logger
+from exceptions import LLMError
 
 
 class LLMAdapter:
@@ -203,6 +208,8 @@ class LLMAdapter:
         Отправляет запрос к OpenAI API с двумя фрагментами текста и получает
         ответ в деловом стиле о характере изменений.
         
+        Включает retry логику и таймауты для повышения надежности.
+        
         Args:
             old_text: Текст из старого документа (базовая версия)
             new_text: Текст из нового документа (измененная версия)
@@ -224,28 +231,46 @@ class LLMAdapter:
             context_section=context_section
         )
         
-        try:
-            # Отправка запроса к OpenAI API
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=self.temperature,
-                max_tokens=self.max_tokens
-            )
-            
-            # Извлечение ответа
-            if response.choices and len(response.choices) > 0:
-                return response.choices[0].message.content.strip()
-            else:
-                return ""
+        # Retry логика с экспоненциальной задержкой
+        max_retries = config.llm.max_retries
+        retry_delay = config.llm.retry_delay_seconds
+        timeout = config.llm.timeout_seconds
+        
+        for attempt in range(max_retries):
+            try:
+                # Отправка запроса к OpenAI API с таймаутом
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": self.system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens,
+                    timeout=timeout
+                )
                 
-        except Exception as e:
-            # Обработка ошибок без прерывания работы программы
-            print(f"Ошибка при обращении к LLM: {e}")
-            return ""
+                # Извлечение ответа
+                if response.choices and len(response.choices) > 0:
+                    return response.choices[0].message.content.strip()
+                else:
+                    return ""
+                    
+            except Exception as e:
+                error_msg = str(e)
+                logger.warning(f"Попытка {attempt + 1}/{max_retries} не удалась: {error_msg}")
+                
+                # Если это последняя попытка, логируем ошибку и возвращаем пустую строку
+                if attempt == max_retries - 1:
+                    logger.error(f"Все попытки исчерпаны. Ошибка LLM: {error_msg}")
+                    return ""
+                
+                # Экспоненциальная задержка перед следующей попыткой
+                delay = retry_delay * (2 ** attempt)
+                logger.debug(f"Ожидание {delay} секунд перед следующей попыткой...")
+                time.sleep(delay)
+        
+        return ""
     
     def analyze_multiple_changes(self, text_pairs: list[tuple[str, str]], 
                                 contexts: Optional[list[str]] = None) -> list[str]:
