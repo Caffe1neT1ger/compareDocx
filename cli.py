@@ -219,6 +219,7 @@ def main():
         statistics = comparator.get_statistics()
         table_changes = comparator.get_table_changes()
         image_changes = comparator.get_image_changes()
+        summary_changes = comparator._generate_summary_changes()
         
         # Применение фильтров
         filters = {}
@@ -321,7 +322,8 @@ def main():
                     file1_name,
                     file2_name,
                     table_changes,
-                    image_changes
+                    image_changes,
+                    summary_changes
                 )
                 print(f"  [OK] Excel: {output_path}")
             
@@ -336,7 +338,8 @@ def main():
                     file2_name,
                     table_changes,
                     image_changes,
-                    filters if filters else None
+                    filters if filters else None,
+                    summary_changes
                 )
                 print(f"  [OK] JSON: {output_path}")
             
@@ -348,7 +351,8 @@ def main():
                     file1_name,
                     file2_name,
                     table_changes,
-                    image_changes
+                    image_changes,
+                    summary_changes
                 )
                 print(f"  [OK] CSV: файлы сохранены в {comparison_dir}")
             
@@ -361,7 +365,8 @@ def main():
                     file1_name,
                     file2_name,
                     table_changes,
-                    image_changes
+                    image_changes,
+                    summary_changes
                 )
                 print(f"  [OK] HTML: {output_path}")
         

@@ -42,7 +42,8 @@ class HTMLExporter:
     def export_comparison(self, comparison_results: List[Dict],
                          statistics: Dict, file1_name: str, file2_name: str,
                          table_changes: List[Dict] = None,
-                         image_changes: List[Dict] = None):
+                         image_changes: List[Dict] = None,
+                         summary_changes: str = ""):
         """
         Экспорт результатов сравнения в HTML.
         
@@ -57,7 +58,7 @@ class HTMLExporter:
         try:
             html_content = self._generate_html(
                 comparison_results, statistics, file1_name, file2_name,
-                table_changes, image_changes
+                table_changes, image_changes, summary_changes
             )
             
             # Сохранение файла
@@ -74,7 +75,8 @@ class HTMLExporter:
     def _generate_html(self, comparison_results: List[Dict],
                       statistics: Dict, file1_name: str, file2_name: str,
                       table_changes: List[Dict] = None,
-                      image_changes: List[Dict] = None) -> str:
+                      image_changes: List[Dict] = None,
+                      summary_changes: str = "") -> str:
         """Генерация HTML контента."""
         
         # Фильтруем только изменения
@@ -291,6 +293,13 @@ class HTMLExporter:
             </div>
         </div>
         
+        {f'''
+        <h2>📝 Краткое описание изменений</h2>
+        <div class="summary-section" style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #dee2e6;">
+            <pre style="white-space: pre-wrap; font-family: inherit; margin: 0; font-size: 1em; line-height: 1.6;">{self._escape_html(summary_changes)}</pre>
+        </div>
+        ''' if summary_changes and summary_changes.strip() and summary_changes.strip() != "Общие правки." else ''}
+        
         <h2 class="section-toggle" onclick="toggleSection('filters')">🔍 Фильтры и поиск</h2>
         <div id="filters" class="filters section-content">
             <input type="text" id="searchInput" placeholder="Поиск по тексту..." onkeyup="filterTable()">
@@ -344,6 +353,15 @@ class HTMLExporter:
                 "deleted": "Удален"
             }.get(status, status)
             
+            change_desc = result.get('change_description', '')
+            llm_resp = result.get('llm_response', '')
+            
+            # Если нет изменений, ставим "Без изменений"
+            if not change_desc and status == 'identical':
+                change_desc = 'Без изменений'
+            if not llm_resp:
+                llm_resp = 'Без изменений'
+            
             html += f"""
                     <tr class="{status_class}">
                         <td>{idx}</td>
@@ -355,8 +373,8 @@ class HTMLExporter:
                         <td><div class="text-diff">{self._escape_html(result.get('text_1', ''))}</div></td>
                         <td><div class="text-diff">{self._escape_html(result.get('text_2', ''))}</div></td>
                         <td>{result.get('similarity', 0):.2%}</td>
-                        <td>{self._escape_html(result.get('change_description', ''))}</td>
-                        <td>{self._escape_html(result.get('llm_response', ''))}</td>
+                        <td>{self._escape_html(change_desc)}</td>
+                        <td>{self._escape_html(llm_resp)}</td>
                     </tr>
 """
         

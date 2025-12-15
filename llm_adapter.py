@@ -18,6 +18,7 @@
 from typing import Optional, Dict
 import os
 import time
+import re
 from pathlib import Path
 
 # Попытка загрузить переменные окружения из .env файла
@@ -31,6 +32,24 @@ except ImportError:
 from config import config
 from logger_config import logger
 from exceptions import LLMError
+
+
+def _remove_markdown_bold(text: str) -> str:
+    """
+    Удаляет markdown форматирование жирного текста (**текст**) из строки.
+    
+    Args:
+        text: Текст с возможным markdown форматированием
+        
+    Returns:
+        Текст без markdown форматирования жирного текста
+    """
+    if not text:
+        return text
+    # Удаляем **текст** и заменяем на просто текст
+    # Паттерн для **текст** или ** текст **
+    text = re.sub(r'\*\*([^*]+?)\*\*', r'\1', text)
+    return text
 
 
 class LLMAdapter:
@@ -253,7 +272,7 @@ class LLMAdapter:
                     path_prefix += f". страница {page_part}."
                 else:
                     path_prefix += "."
-                path_prefix += " "
+                path_prefix += "\n\n"  # Пустая строка между путем и текстом
         
         # Формирование пользовательского промпта из шаблона
         context_section = f"\n\nКонтекст: {context}" if context else ""
@@ -305,14 +324,16 @@ class LLMAdapter:
                     content = response.choices[0].message.content
                     if content:
                         llm_response = content.strip()
-                        # Добавляем путь в начало ответа, если он есть
+                        # Убираем markdown форматирование жирного текста
+                        llm_response = _remove_markdown_bold(llm_response)
+                        # Добавляем путь в начало ответа с пустой строкой, если он есть
                         if path_prefix:
                             return f"{path_prefix}{llm_response}"
                         return llm_response
                     else:
-                        return ""
+                        return "Без изменений"
                 else:
-                    return ""
+                    return "Без изменений"
                     
             except Exception as e:
                 error_msg = str(e)
@@ -387,4 +408,184 @@ class LLMAdapter:
             "max_tokens": str(self.max_tokens),
             "enabled": str(self.enabled)
         }
+    
+    def generate_summary(self, llm_responses: list[str]) -> str:
+        """
+        Генерация краткого смыслового описания всех изменений на основе LLM ответов.
+        
+        Собирает все LLM ответы, группирует их и отправляет к LLM для генерации
+        краткого описания в формате нумерованного списка.
+        
+        Args:
+            llm_responses: Список всех LLM ответов об изменениях (исключая "Без изменений")
+        
+        Returns:
+            Краткое смысловое описание изменений в формате нумерованного списка
+        """
+        if not self.enabled or not self.client:
+            return "Общие правки."
+        
+        # Фильтруем пустые ответы и "Без изменений"
+        filtered_responses = [
+            resp for resp in llm_responses 
+            if resp and resp.strip() and resp.strip() != "Без изменений"
+        ]
+        
+        logger.debug(f"Получено {len(llm_responses)} LLM ответов, после фильтрации: {len(filtered_responses)}")
+        
+        if not filtered_responses:
+            logger.warning("Нет LLM ответов для генерации краткого описания")
+            return "Общие правки."
+        
+        # Загружаем промпт для краткого описания
+        summary_prompt_file = Path(__file__).parent / "prompts" / "summary_prompt.txt"
+        try:
+            if summary_prompt_file.exists():
+                with open(summary_prompt_file, 'r', encoding='utf-8') as f:
+                    summary_system_prompt = f.read().strip()
+            else:
+                # Дефолтный промпт для краткого описания
+                summary_system_prompt = """Вы - профессиональный аналитик документов. 
+Проанализируйте список изменений и составьте краткое смысловое описание в формате нумерованного списка.
+Группируйте похожие изменения вместе. Указывайте конкретные места изменений (разделы, пункты, таблицы).
+Если есть общие правки, укажите их отдельным пунктом."""
+        except Exception as e:
+            logger.warning(f"Ошибка при загрузке промпта краткого описания: {e}")
+            summary_system_prompt = "Проанализируйте список изменений и составьте краткое смысловое описание."
+        
+        # Ограничиваем количество ответов для анализа (первые 15 наиболее важных)
+        # Сортируем по длине ответа (более длинные ответы обычно содержат больше информации)
+        sorted_responses = sorted(filtered_responses, key=len, reverse=True)[:15]
+        
+        # Убираем пути из ответов для более компактного представления и сокращаем длину
+        simplified_responses = []
+        for resp in sorted_responses:
+            # Убираем путь из начала ответа, оставляем только суть изменений
+            if "\n\n" in resp:
+                _, response_text = resp.split("\n\n", 1)
+                # Сокращаем длину каждого ответа до 200 символов
+                if len(response_text) > 200:
+                    response_text = response_text[:200] + "..."
+                simplified_responses.append(response_text.strip())
+            else:
+                # Сокращаем длину каждого ответа до 200 символов
+                resp_short = resp.strip()
+                if len(resp_short) > 200:
+                    resp_short = resp_short[:200] + "..."
+                simplified_responses.append(resp_short)
+        
+        # Формируем список изменений для анализа
+        changes_list = "\n".join([f"{i+1}. {resp}" for i, resp in enumerate(simplified_responses)])
+        
+        logger.debug(f"Отправка {len(simplified_responses)} изменений к LLM для генерации краткого описания")
+        
+        user_prompt = f"""Проанализируйте следующие изменения в документе и составьте краткое смысловое описание в формате нумерованного списка:
+
+{changes_list}
+
+Составьте краткое описание, группируя похожие изменения вместе. Указывайте конкретные места изменений (разделы, пункты, таблицы) с их номерами. Формат ответа - нумерованный список."""
+        
+        # Retry логика
+        max_retries = config.llm.max_retries
+        retry_delay = config.llm.retry_delay_seconds
+        timeout = config.llm.timeout_seconds
+        
+        for attempt in range(max_retries):
+            try:
+                request_params = {
+                    "model": self.model,
+                    "messages": [
+                        {"role": "system", "content": summary_system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "temperature": self.temperature,
+                    "max_tokens": min(self.max_tokens * 8, 2500),  # Увеличиваем лимит для краткого описания
+                    "timeout": timeout * 3  # Увеличиваем таймаут для более сложного запроса
+                }
+                
+                # Дополнительные параметры из переменных окружения
+                presence_penalty = os.getenv("OPENAI_PRESENCE_PENALTY")
+                if presence_penalty:
+                    try:
+                        request_params["presence_penalty"] = float(presence_penalty)
+                    except (ValueError, TypeError):
+                        pass
+                
+                top_p = os.getenv("OPENAI_TOP_P")
+                if top_p:
+                    try:
+                        request_params["top_p"] = float(top_p)
+                    except (ValueError, TypeError):
+                        pass
+                
+                response = self.client.chat.completions.create(**request_params)
+                
+                logger.debug(f"LLM ответ получен: choices={len(response.choices) if response.choices else 0}")
+                
+                if response.choices and len(response.choices) > 0:
+                    choice = response.choices[0]
+                    # Проверяем наличие content разными способами для совместимости
+                    content = None
+                    if hasattr(choice, 'message'):
+                        if hasattr(choice.message, 'content'):
+                            content = choice.message.content
+                        elif isinstance(choice.message, dict):
+                            content = choice.message.get('content')
+                        # Дополнительная проверка через getattr
+                        if content is None:
+                            content = getattr(choice.message, 'content', None)
+                    
+                    finish_reason = getattr(choice, 'finish_reason', None)
+                    
+                    logger.debug(f"Содержимое ответа: {repr(content[:100]) if content else 'None'}")
+                    logger.debug(f"Finish reason: {finish_reason}, тип choice: {type(choice)}")
+                    
+                    if content:
+                        result = content.strip()
+                        # Убираем markdown форматирование жирного текста
+                        result = _remove_markdown_bold(result)
+                        if result:
+                            logger.info(f"Краткое описание успешно сгенерировано ({len(result)} символов)")
+                            if finish_reason == 'length':
+                                logger.warning("Ответ LLM был обрезан из-за лимита токенов, но часть ответа получена")
+                            return result
+                        else:
+                            logger.warning("LLM вернул пустой ответ после strip() для краткого описания")
+                            return "Общие правки."
+                    else:
+                        logger.warning(f"LLM вернул None для краткого описания. Finish reason: {finish_reason}")
+                        # Если ответ был обрезан из-за лимита токенов, увеличиваем лимит и пробуем снова
+                        if finish_reason == 'length' and attempt < max_retries - 1:
+                            new_max_tokens = min(self.max_tokens * 10, 3000)
+                            logger.info(f"Увеличиваем max_tokens до {new_max_tokens} и повторяем попытку {attempt + 2}")
+                            request_params["max_tokens"] = new_max_tokens
+                            # Также сокращаем входные данные еще больше
+                            if len(simplified_responses) > 10:
+                                simplified_responses = simplified_responses[:10]
+                                changes_list = "\n".join([f"{i+1}. {resp}" for i, resp in enumerate(simplified_responses)])
+                                request_params["messages"][1]["content"] = f"""Проанализируйте следующие изменения в документе и составьте краткое смысловое описание в формате нумерованного списка:
+
+{changes_list}
+
+Составьте краткое описание, группируя похожие изменения вместе. Указывайте конкретные места изменений (разделы, пункты, таблицы) с их номерами. Формат ответа - нумерованный список."""
+                            delay = retry_delay * (2 ** attempt)
+                            time.sleep(delay)
+                            continue
+                        return "Общие правки."
+                else:
+                    logger.warning("LLM не вернул choices для краткого описания")
+                    return "Общие правки."
+                    
+            except Exception as e:
+                error_msg = str(e)
+                logger.warning(f"Попытка генерации краткого описания {attempt + 1}/{max_retries} не удалась: {error_msg}")
+                
+                if attempt == max_retries - 1:
+                    logger.error(f"Не удалось сгенерировать краткое описание: {error_msg}")
+                    return "Общие правки."
+                
+                delay = retry_delay * (2 ** attempt)
+                time.sleep(delay)
+        
+        return "Общие правки."
 

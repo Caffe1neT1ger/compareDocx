@@ -43,7 +43,8 @@ class CSVExporter:
     def export_comparison(self, comparison_results: List[Dict],
                          statistics: Dict, file1_name: str, file2_name: str,
                          table_changes: List[Dict] = None,
-                         image_changes: List[Dict] = None):
+                         image_changes: List[Dict] = None,
+                         summary_changes: str = ""):
         """
         Экспорт результатов сравнения в CSV файлы.
         
@@ -71,7 +72,7 @@ class CSVExporter:
             
             # Экспорт статистики
             stats_file = self.output_dir / f"{base_name}_statistics_{timestamp}.csv"
-            self._export_statistics(stats_file, statistics, file1_name, file2_name)
+            self._export_statistics(stats_file, statistics, file1_name, file2_name, summary_changes)
             
             # Экспорт изменений таблиц
             if table_changes:
@@ -106,6 +107,15 @@ class CSVExporter:
             writer.writerow(headers)
             
             for result in results:
+                change_desc = result.get("change_description", "")
+                llm_resp = result.get("llm_response", "")
+                
+                # Если нет изменений, ставим "Без изменений"
+                if not change_desc and result.get("status") == "identical":
+                    change_desc = "Без изменений"
+                if not llm_resp:
+                    llm_resp = "Без изменений"
+                
                 row = [
                     result.get("index_1") or "",
                     result.get("status", ""),
@@ -121,13 +131,13 @@ class CSVExporter:
                     result.get("text_2") or "",
                     result.get("similarity", 0),
                     "; ".join(result.get("differences", [])),
-                    result.get("change_description", ""),
-                    result.get("llm_response", "")
+                    change_desc,
+                    llm_resp
                 ]
                 writer.writerow(row)
     
     def _export_statistics(self, file_path: Path, statistics: Dict,
-                           file1_name: str, file2_name: str):
+                           file1_name: str, file2_name: str, summary_changes: str = ""):
         """Экспорт статистики."""
         with open(file_path, 'w', newline='', encoding=self.encoding) as f:
             writer = csv.writer(f, delimiter=self.delimiter)
@@ -149,6 +159,16 @@ class CSVExporter:
             
             for key, value in stats_data:
                 writer.writerow([key, value])
+            
+            # Краткое описание изменений
+            if summary_changes and summary_changes.strip() and summary_changes.strip() != "Общие правки.":
+                writer.writerow([])
+                writer.writerow(["Краткое описание изменений", ""])
+                # Разбиваем на строки для лучшей читаемости
+                summary_lines = summary_changes.split('\n')
+                for line in summary_lines:
+                    if line.strip():
+                        writer.writerow(["", line.strip()])
     
     def _export_table_changes(self, file_path: Path, table_changes: List[Dict]):
         """Экспорт изменений таблиц."""

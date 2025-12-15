@@ -329,7 +329,7 @@ class Compare:
                 "change_description": "",
                 "change_type": "",  # Тип исправления
                 "change_subtype": "",  # Подтип исправления
-                "llm_response": ""  # Ответ от LLM
+                "llm_response": "Без изменений"  # Ответ от LLM
             }
             
             if idx1 in match_map:
@@ -352,6 +352,8 @@ class Compare:
                     result["status"] = "identical"
                     result["change_type"] = "Без изменений"
                     result["change_subtype"] = ""
+                    result["change_description"] = "Без изменений"
+                    result["llm_response"] = "Без изменений"
                 elif similarity >= config.comparison.similarity_threshold_medium:
                     result["status"] = "modified"
                     result["differences"] = self._get_differences(para1["text"], para2["text"])
@@ -420,7 +422,7 @@ class Compare:
                     "similarity": 0.0,
                     "differences": [],
                     "change_description": "",
-                    "llm_response": ""  # Ответ от LLM
+                    "llm_response": "Без изменений"  # Ответ от LLM
                 }
                 result["change_description"] = self._build_change_description(result)
                 result["change_type"] = "Добавлен"
@@ -897,52 +899,51 @@ class Compare:
             result: Результат сравнения
             
         Returns:
-            Текстовое описание изменений
+            Текстовое описание изменений с путем и пустой строкой перед текстом
         """
         status = result["status"]
-        description_parts = []
         
         if status == "identical":
-            return ""
+            return "Без изменений"
+        
+        description_parts = []
         
         # Полный путь (приоритет новому документу, исключаем "Рисунок")
         full_path = result.get("full_path_2") or result.get("full_path_1") or ""
-        if full_path and not full_path.lower().startswith('рисунок'):
-            # Извлекаем номер пункта из пути
-            path_match = re.search(r'Пункт\s+(\d+(?:\.\d+)*)', full_path)
-            if path_match:
-                point_num = path_match.group(1)
-                description_parts.append(f"Пункт {point_num}")
-            elif not any(x in full_path.lower() for x in ['рисунок', 'таблица', 'рис.', 'табл.']):
-                description_parts.append(full_path)
+        if full_path and not any(x in full_path.lower() for x in ['рисунок', 'таблица', 'рис.', 'табл.']):
+            description_parts.append(full_path)
         
         # Страница нового документа
         page_2 = result.get("page_2")
         if page_2:
             description_parts.append(f"страница {page_2}")
         
+        # Формируем путь с пустой строкой перед описанием изменений
+        path_text = ". ".join(description_parts) if description_parts else ""
+        change_text_parts = []
+        
         # Описание изменений в формате "старое" изменено на "новое"
         text1 = result.get("text_1", "")
         text2 = result.get("text_2", "")
         
         if status == "added":
-            description_parts.append("Добавлен новый абзац")
+            change_text_parts.append("Добавлен новый абзац")
             if text2:
                 # Полный текст или превью
                 if len(text2) <= 200:
-                    description_parts.append(f"'{text2}'")
+                    change_text_parts.append(f"'{text2}'")
                 else:
                     text_preview = text2[:150].replace("\n", " ").strip() + "..."
-                    description_parts.append(f"'{text_preview}'")
+                    change_text_parts.append(f"'{text_preview}'")
         
         elif status == "deleted":
-            description_parts.append("Удален абзац")
+            change_text_parts.append("Удален абзац")
             if text1:
                 if len(text1) <= 200:
-                    description_parts.append(f"'{text1}'")
+                    change_text_parts.append(f"'{text1}'")
                 else:
                     text_preview = text1[:150].replace("\n", " ").strip() + "..."
-                    description_parts.append(f"'{text_preview}'")
+                    change_text_parts.append(f"'{text_preview}'")
         
         elif status == "modified":
             if text1 and text2:
@@ -952,7 +953,7 @@ class Compare:
                 
                 # Если тексты идентичны после нормализации
                 if norm1 == norm2:
-                    description_parts.append("Изменено только форматирование")
+                    change_text_parts.append("Изменено только форматирование")
                 else:
                     # Поиск конкретных изменений
                     # Версии
@@ -960,7 +961,7 @@ class Compare:
                     version2_match = re.search(r'верси[ияею]\s+([\d.]+)', text2, re.IGNORECASE)
                     
                     if version1_match and version2_match and version1_match.group(1) != version2_match.group(1):
-                        description_parts.append(
+                        change_text_parts.append(
                             f"'{version1_match.group(1)}' изменено на '{version2_match.group(1)}'"
                         )
                     else:
@@ -976,18 +977,28 @@ class Compare:
                                 removed = ' '.join(words1[i1:i2])
                                 added = ' '.join(words2[j1:j2])
                                 if removed and added and len(removed) < 100 and len(added) < 100:
-                                    description_parts.append(f"'{removed}' изменено на '{added}'")
+                                    change_text_parts.append(f"'{removed}' изменено на '{added}'")
                                     changes_found = True
                                     break
                         
                         if not changes_found:
                             # Если не нашли конкретных изменений, используем полные тексты
                             if len(text1) <= 100 and len(text2) <= 100:
-                                description_parts.append(f"'{text1}' изменено на '{text2}'")
+                                change_text_parts.append(f"'{text1}' изменено на '{text2}'")
                             else:
-                                description_parts.append("Текст абзаца изменен")
+                                change_text_parts.append("Текст абзаца изменен")
         
-        return ". ".join(description_parts) if description_parts else ""
+        change_text = ". ".join(change_text_parts) if change_text_parts else ""
+        
+        # Объединяем путь и описание с пустой строкой между ними
+        if path_text and change_text:
+            return f"{path_text}\n\n{change_text}"
+        elif path_text:
+            return path_text
+        elif change_text:
+            return change_text
+        else:
+            return "Без изменений"
     
     def _determine_change_type(self, text1: str, text2: str, full_path: str = "") -> str:
         """
@@ -1290,7 +1301,15 @@ class Compare:
         
         logger.info("Начало анализа изменений через LLM")
         
-        # Фильтруем только элементы с изменениями
+        # Устанавливаем "Без изменений" для всех элементов, которые не будут анализироваться
+        for result in self.comparison_results:
+            if result["status"] == "identical":
+                if not result.get("change_description") or result.get("change_description") == "":
+                    result["change_description"] = "Без изменений"
+                if not result.get("llm_response") or result.get("llm_response") == "":
+                    result["llm_response"] = "Без изменений"
+        
+        # Фильтруем только элементы с изменениями для LLM анализа
         changed_results = [
             r for r in self.comparison_results 
             if r["status"] in ["modified", "added", "deleted"]
@@ -1354,11 +1373,95 @@ class Compare:
                 # Для удаленных элементов - анализируем старый текст
                 llm_response = self.llm_adapter.analyze_changes(text1, "", context)
                 result["llm_response"] = llm_response
+            
+            # Если LLM не вернул ответ, ставим "Без изменений"
+            if not result.get("llm_response"):
+                result["llm_response"] = "Без изменений"
         
         if TQDM_AVAILABLE:
             progress_bar.close()
         
         logger.info(f"Анализ через LLM завершен. Обработано {total_changed} элементов.")
+    
+    def _generate_summary_changes(self) -> str:
+        """
+        Генерация краткого смыслового описания всех изменений в документе через LLM.
+        
+        Собирает все LLM ответы об изменениях и отправляет их к LLM для генерации
+        краткого описания в формате нумерованного списка.
+        
+        Returns:
+            Краткое смысловое описание всех изменений в формате нумерованного списка
+        """
+        if not self.llm_adapter or not self.llm_adapter.is_enabled():
+            # Если LLM недоступен, возвращаем простое описание
+            summary_parts = []
+            modified_count = sum(1 for r in self.comparison_results if r["status"] == "modified")
+            added_count = sum(1 for r in self.comparison_results if r["status"] == "added")
+            deleted_count = sum(1 for r in self.comparison_results if r["status"] == "deleted")
+            
+            if modified_count > 0:
+                summary_parts.append(f"Изменено: {modified_count}")
+            if added_count > 0:
+                summary_parts.append(f"Добавлено: {added_count}")
+            if deleted_count > 0:
+                summary_parts.append(f"Удалено: {deleted_count}")
+            
+            tables_changed = len([t for t in self.table_changes if t["status"] != "identical"])
+            if tables_changed > 0:
+                summary_parts.append(f"Таблиц изменено: {tables_changed}")
+            
+            images_changed = len([i for i in self.image_changes if i["status"] != "identical"])
+            if images_changed > 0:
+                summary_parts.append(f"Изображений изменено: {images_changed}")
+            
+            if summary_parts:
+                return "; ".join(summary_parts)
+            else:
+                return "Общие правки."
+        
+        # Собираем все LLM ответы об изменениях
+        llm_responses = []
+        
+        # Изменения в абзацах
+        for result in self.comparison_results:
+            llm_resp = result.get("llm_response", "")
+            # Фильтруем пустые ответы и "Без изменений"
+            if llm_resp and llm_resp.strip() and llm_resp.strip() != "Без изменений":
+                llm_responses.append(llm_resp)
+        
+        logger.debug(f"Собрано {len(llm_responses)} LLM ответов для генерации краткого описания")
+        
+        # Изменения в таблицах
+        for table_change in self.table_changes:
+            if table_change.get("status") != "identical":
+                change_desc = table_change.get("change_description", "")
+                if change_desc and change_desc != "Без изменений":
+                    table_name = table_change.get("table_1_name") or table_change.get("table_2_name") or ""
+                    if table_name:
+                        llm_responses.append(f"Таблица {table_name}: {change_desc}")
+                    else:
+                        llm_responses.append(f"Таблица: {change_desc}")
+        
+        # Изменения в изображениях
+        for image_change in self.image_changes:
+            if image_change.get("status") != "identical":
+                change_desc = image_change.get("change_description", "")
+                if change_desc and change_desc != "Без изменений":
+                    image_name = image_change.get("image_1_name") or image_change.get("image_2_name") or ""
+                    if image_name:
+                        llm_responses.append(f"Изображение {image_name}: {change_desc}")
+                    else:
+                        llm_responses.append(f"Изображение: {change_desc}")
+        
+        # Генерируем краткое описание через LLM
+        if llm_responses:
+            logger.info(f"Генерация краткого описания на основе {len(llm_responses)} изменений...")
+            summary = self.llm_adapter.generate_summary(llm_responses)
+            logger.info("Краткое описание сгенерировано.")
+            return summary
+        else:
+            return "Общие правки."
     
     def get_statistics(self) -> Dict:
         """

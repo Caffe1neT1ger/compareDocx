@@ -51,7 +51,8 @@ class ExcelExporter:
     def export_comparison(self, comparison_results: List[Dict], 
                          statistics: Dict, file1_name: str, file2_name: str,
                          table_changes: List[Dict] = None,
-                         image_changes: List[Dict] = None):
+                         image_changes: List[Dict] = None,
+                         summary_changes: str = ""):
         """
         Экспорт результатов сравнения в Excel.
         
@@ -62,6 +63,7 @@ class ExcelExporter:
             file2_name: Имя второго файла
             table_changes: Список изменений таблиц
             image_changes: Список изменений изображений
+            summary_changes: Краткое описание всех изменений
         """
         # Создание листа с результатами сравнения
         ws_results = self.workbook.create_sheet("Сравнение", 0)
@@ -77,14 +79,22 @@ class ExcelExporter:
         ws_stats = self.workbook.create_sheet("Статистика", 2)
         self._create_statistics_sheet(ws_stats, statistics, file1_name, file2_name)
         
+        # Создание листа с кратким описанием изменений
+        has_summary = summary_changes and summary_changes.strip() and summary_changes.strip() != "Общие правки."
+        if has_summary:
+            ws_summary = self.workbook.create_sheet("Краткое описание", 3)
+            self._create_summary_sheet(ws_summary, summary_changes)
+        
         # Создание листа с изменениями таблиц
         if table_changes:
-            ws_tables = self.workbook.create_sheet("Таблицы", 3)
+            sheet_index = 4 if has_summary else 3
+            ws_tables = self.workbook.create_sheet("Таблицы", sheet_index)
             self._create_tables_sheet(ws_tables, table_changes)
         
         # Создание листа с изменениями изображений
         if image_changes:
-            ws_images = self.workbook.create_sheet("Изображения", 4)
+            sheet_index = 5 if has_summary else 4
+            ws_images = self.workbook.create_sheet("Изображения", sheet_index)
             self._create_images_sheet(ws_images, image_changes)
         
         # Сохранение файла
@@ -154,6 +164,15 @@ class ExcelExporter:
             }.get(status, status)
             
             # Данные строки
+            change_desc = result.get("change_description", "")
+            llm_resp = result.get("llm_response", "")
+            
+            # Если нет изменений, ставим "Без изменений"
+            if not change_desc and status == "identical":
+                change_desc = "Без изменений"
+            if not llm_resp:
+                llm_resp = "Без изменений"
+            
             row_data = [
                 row_idx - 1,  # №
                 status_ru,  # Статус
@@ -169,8 +188,8 @@ class ExcelExporter:
                 result.get("text_2") or "",  # Текст 2
                 f"{result['similarity'] * 100:.1f}%" if result.get("similarity") else "",  # Схожесть
                 "\n".join(result.get("differences", []))[:1000],  # Различия (увеличено для полных текстов)
-                result.get("change_description", ""),  # Описание изменений
-                result.get("llm_response", "")  # Ответ LLM
+                change_desc,  # Описание изменений
+                llm_resp  # Ответ LLM
             ]
             
             for col_idx, value in enumerate(row_data, 1):
@@ -226,6 +245,34 @@ class ExcelExporter:
         """
         # Используем тот же метод форматирования, что и для основного листа
         self._create_comparison_sheet(worksheet, comparison_results, file1_name, file2_name)
+    
+    def _create_summary_sheet(self, worksheet, summary_changes: str):
+        """
+        Создание листа с кратким описанием изменений.
+        
+        Args:
+            worksheet: Рабочий лист Excel
+            summary_changes: Краткое описание всех изменений
+        """
+        # Заголовок
+        title_cell = worksheet.cell(row=1, column=1, value="Краткое описание изменений")
+        title_cell.font = Font(bold=True, size=14)
+        worksheet.merge_cells('A1:B1')
+        
+        # Весь текст в одной ячейке
+        content_cell = worksheet.cell(row=3, column=1, value=summary_changes)
+        content_cell.alignment = Alignment(wrap_text=True, vertical="top", horizontal="left")
+        content_cell.font = Font(size=11)
+        
+        # Объединяем ячейки для всего текста
+        worksheet.merge_cells('A3:B100')  # Объединяем достаточно много строк для длинного текста
+        
+        # Настройка ширины столбцов
+        worksheet.column_dimensions['A'].width = 80
+        worksheet.column_dimensions['B'].width = 20
+        
+        # Автоматическая высота строки для содержимого
+        worksheet.row_dimensions[3].height = None
     
     def _create_statistics_sheet(self, worksheet, statistics: Dict,
                                 file1_name: str, file2_name: str):

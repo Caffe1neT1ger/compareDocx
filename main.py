@@ -116,6 +116,7 @@ def main():
         statistics = comparator.get_statistics()  # Общая статистика
         table_changes = comparator.get_table_changes()  # Изменения в таблицах
         image_changes = comparator.get_image_changes()  # Изменения в изображениях
+        summary_changes = comparator._generate_summary_changes()  # Краткое описание всех изменений
         
         # Шаг 4: Вывод статистики
         print(f"\nОбработано абзацев: {statistics['total']}")
@@ -163,7 +164,8 @@ def main():
             os.path.basename(file1_path),
             os.path.basename(file2_path),
             table_changes,
-            image_changes
+            image_changes,
+            summary_changes
         )
         
         # Шаг 7: Завершение

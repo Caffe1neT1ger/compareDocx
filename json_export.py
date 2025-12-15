@@ -45,7 +45,8 @@ class JSONExporter:
                          statistics: Dict, file1_name: str, file2_name: str,
                          table_changes: List[Dict] = None,
                          image_changes: List[Dict] = None,
-                         filters: Optional[Dict] = None):
+                         filters: Optional[Dict] = None,
+                         summary_changes: str = ""):
         """
         Экспорт результатов сравнения в JSON.
         
@@ -68,6 +69,8 @@ class JSONExporter:
             # Применение фильтров
             filtered_results = JSONExporter._apply_filters(None, comparison_results, filters)
             
+            # summary_changes больше не добавляется к каждому результату, только в metadata
+            
             # Формирование структуры данных
             export_data = {
                 "metadata": {
@@ -75,7 +78,8 @@ class JSONExporter:
                     "file2": file2_name,
                     "export_date": datetime.now().isoformat(),
                     "total_results": len(filtered_results),
-                    "total_original": len(comparison_results)
+                    "total_original": len(comparison_results),
+                    "summary_changes": summary_changes
                 },
                 "statistics": statistics,
                 "comparison_results": filtered_results,

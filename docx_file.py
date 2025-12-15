@@ -435,33 +435,54 @@ class DocxFile:
     
     def _build_full_path(self, element_type: str) -> str:
         """
-        Построение полного пути до элемента.
+        Построение полного пути до элемента без дубликатов.
         
         Args:
             element_type: Тип элемента
             
         Returns:
-            Полный путь в формате "Раздел 1 > Подраздел 1.1 > Пункт 1.1.1"
+            Полный путь в формате "Раздел 1 Название > Подраздел 1.1 Название"
         """
         if not self.hierarchy_stack:
             return ""
         
         path_parts = []
+        seen_numbers = set()  # Для отслеживания уже добавленных номеров
+        
         for item in self.hierarchy_stack:
-            text = item["text"]
+            text = item["text"].strip()
             level = item["level"]
             
             # Извлечение номера из текста (если есть)
-            number_match = re.match(r'^(\d+(?:\.\d+)*)', text)
+            number_match = re.match(r'^(\d+(?:\.\d+)*)\s*(.*)', text)
             if number_match:
                 number = number_match.group(1)
-                # Определение типа по уровню и номеру
-                if level <= 2:
-                    path_parts.append(f"Раздел {number}")
-                elif level <= 4:
-                    path_parts.append(f"Подраздел {number}")
-                else:
-                    path_parts.append(f"Пункт {number}")
+                name = number_match.group(2).strip()
+                
+                # Убираем точку в начале названия, если она есть
+                if name.startswith('.'):
+                    name = name[1:].strip()
+                
+                # Проверяем, не дублируется ли номер
+                if number not in seen_numbers:
+                    seen_numbers.add(number)
+                    
+                    # Определение типа по уровню и номеру
+                    if level <= 2:
+                        if name:
+                            path_parts.append(f"Раздел {number}. {name}")
+                        else:
+                            path_parts.append(f"Раздел {number}")
+                    elif level <= 4:
+                        if name:
+                            path_parts.append(f"Подраздел {number}. {name}")
+                        else:
+                            path_parts.append(f"Подраздел {number}")
+                    else:
+                        if name:
+                            path_parts.append(f"Пункт {number}. {name}")
+                        else:
+                            path_parts.append(f"Пункт {number}")
             else:
                 # Если номера нет, используем текст
                 short_text = text[:50] if len(text) > 50 else text
@@ -472,7 +493,15 @@ class DocxFile:
                 else:
                     path_parts.append(f"Пункт: {short_text}")
         
-        return " > ".join(path_parts) if path_parts else ""
+        # Убираем дубликаты последовательных элементов
+        filtered_parts = []
+        prev_part = None
+        for part in path_parts:
+            if part != prev_part:
+                filtered_parts.append(part)
+                prev_part = part
+        
+        return " > ".join(filtered_parts) if filtered_parts else ""
     
     def _parse_tables(self):
         """Парсинг таблиц из документа."""
